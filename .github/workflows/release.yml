@@ -1,0 +1,39 @@
+name: Release
+
+on: 
+    release: 
+      types:
+        - created
+
+jobs:
+  publish:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Setup .NET Core
+      uses: actions/setup-dotnet@v1
+      with:
+        dotnet-version: 3.0.103
+    - name: Get the Tagged Version
+      id: get_version
+      run: | 
+        echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//}
+        echo ::set-output name=RELEASE_ID::$(jq --raw-output '.release.id' $GITHUB_EVENT_PATH)
+    - name: Publish for Linux
+      run: dotnet publish -o ./slb-linux-x64 -c Release -r linux-x64 /p:PublishSingleFile=true /p:PublishTrimmed=true /p:Version=${{ steps.get_version.outputs.VERSION }}
+    - name: Zip it Up
+      run: zip -r -j SimplestLoadBalancer-${{ steps.get_version.outputs.VERSION }}-linux-x64.zip ./slb-linux-x64 
+    - name: Upload to Releaase
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        VERSION: ${{ steps.get_version.outputs.VERSION }}
+        FILE: SimplestLoadBalancer-${{ steps.get_version.outputs.VERSION }}-linux-x64.zip
+        URL: https://uploads.github.com/repos/${{ github.repository }}/releases/${{ steps.get_version.outputs.RELEASE_ID }}/assets?name=SimplestLoadBalancer-${{ steps.get_version.outputs.VERSION }}-linux-x64.zip
+      run: |
+        echo $VERSION
+        echo $URL
+        AUTH="Authorization: token $GITHUB_TOKEN"
+        echo $AUTH
+        curl -sSL -XPOST -H "$AUTH" --upload-file "$FILE" --header "Content-Type:application/octet-stream" --write-out "%{http_code}" --output $(mktemp) "$URL"

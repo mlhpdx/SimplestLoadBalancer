@@ -1,0 +1,28 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - master
+    tags:
+      - never_ever
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Setup .NET Core
+      uses: actions/setup-dotnet@v1
+      with:
+        dotnet-version: 3.0.103
+    - name: Publish for Linux
+      run: dotnet publish -o ./SimplestLoadBalancer-${{ github.run_id }}-linux-x64 -c Release -r linux-x64 /p:PublishSingleFile=true /p:PublishTrimmed=true
+    - name: Archive Zip
+      uses: actions/upload-artifact@v1
+      with:
+        name: SimplestLoadBalancer-${{ github.run_id }}-linux-x64.zip
+        path: SimplestLoadBalancer-${{ github.run_id }}-linux-x64
+  
