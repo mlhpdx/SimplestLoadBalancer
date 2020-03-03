@@ -80,12 +80,12 @@ It can be tedius to manually send those packets and keep a target registered. A 
 
 ```bash
 #!/bin/bash
-echo -e $(echo  "\x11\x11$(echo "192.168.1.22" | tr "." "\n" | xargs printf '\\x%02X')\x14\x07") > /dev/udp/192.168.1.11/1111
-echo -e $(echo  "\x11\x11$(echo "192.168.1.23" | tr "." "\n" | xargs printf '\\x%02X')\x14\x07") > /dev/udp/192.168.1.11/1111
-echo -e $(echo  "\x11\x11$(echo "192.168.1.24" | tr "." "\n" | xargs printf '\\x%02X')\x14\x07") > /dev/udp/192.168.1.11/1111
-echo -e $(echo  "\x11\x11$(echo "192.168.1.25" | tr "." "\n" | xargs printf '\\x%02X')\x14\x07") > /dev/udp/192.168.1.11/1111
-echo -e $(echo  "\x11\x11$(echo "192.168.1.26" | tr "." "\n" | xargs printf '\\x%02X')\x14\x07") > /dev/udp/192.168.1.11/1111
-echo -e $(echo  "\x11\x11$(echo "192.168.1.27" | tr "." "\n" | xargs printf '\\x%02X')\x14\x07") > /dev/udp/192.168.1.11/1111
+echo -ne $(echo  "\x11\x11$(echo "192.168.1.22" | tr "." "\n" | xargs printf '\\x%02X')\x14\x07") > /dev/udp/192.168.1.11/1111
+echo -ne $(echo  "\x11\x11$(echo "192.168.1.23" | tr "." "\n" | xargs printf '\\x%02X')\x14\x07") > /dev/udp/192.168.1.11/1111
+echo -ne $(echo  "\x11\x11$(echo "192.168.1.24" | tr "." "\n" | xargs printf '\\x%02X')\x14\x07") > /dev/udp/192.168.1.11/1111
+echo -ne $(echo  "\x11\x11$(echo "192.168.1.25" | tr "." "\n" | xargs printf '\\x%02X')\x14\x07") > /dev/udp/192.168.1.11/1111
+echo -ne $(echo  "\x11\x11$(echo "192.168.1.26" | tr "." "\n" | xargs printf '\\x%02X')\x14\x07") > /dev/udp/192.168.1.11/1111
+echo -ne $(echo  "\x11\x11$(echo "192.168.1.27" | tr "." "\n" | xargs printf '\\x%02X')\x14\x07") > /dev/udp/192.168.1.11/1111
 ```
 
 And then use the `watch` command to call that script every few seconds:
