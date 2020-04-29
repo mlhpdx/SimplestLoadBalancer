@@ -17,7 +17,7 @@ jobs:
     - name: Setup .NET Core
       uses: actions/setup-dotnet@v1
       with:
-        dotnet-version: 3.0.103
+        dotnet-version: 3.1.100
     - name: Publish for Linux
       run: dotnet publish -o ./SimplestLoadBalancer-${{ github.run_id }}-linux-x64 -c Release -r linux-x64 /p:PublishSingleFile=true /p:PublishTrimmed=true
     - name: Archive Zip

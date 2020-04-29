@@ -14,7 +14,7 @@ Some simple UDP protocols are stateless and there is no advantage in trying to m
 
 ## Building ##
 
-This is a very simple .Net Core 3.0 project, so to build (assuming you have the SDK installed):
+This is a very simple .Net Core 3.1 project, so to build (assuming you have the SDK installed):
 
 ```
 dotnet build
