@@ -34,11 +34,11 @@ namespace SimplestLoadBalancer
         public static UdpClient Configure(this UdpClient client)
         {
             client.DontFragment = true;
-            client.Client.IOControl((IOControlCode)SIO_UDP_CONNRESET, new byte[] { 0, 0, 0, 0 }, null); // don't throw on disconnect
+//            client.Client.IOControl((IOControlCode)SIO_UDP_CONNRESET, new byte[] { 0, 0, 0, 0 }, null); // don't throw on disconnect
             return client;
         }
     }
-    class Program
+    static class Program
     {
         static long received = 0L;
         static long relayed = 0L;
@@ -55,20 +55,20 @@ namespace SimplestLoadBalancer
         /// <param name="unwise">Allows public IP addresses for targets (default is to only allow private IPs)</param>
         static async Task Main(int serverPort = 1812, int adminPort = 1111, uint clientTimeout = 30, uint targetTimeout = 30, byte defaultTargetWeight = 100, bool unwise = false)
         {
-            await Console.Out.WriteLineAsync($"\r{DateTime.Now:s}: Welcome to the simplest UDP Load Balancer.  Hit Ctrl-C to Stop.");
+            await Console.Out.WriteLineAsync($"{DateTime.Now:s}: Welcome to the simplest UDP Load Balancer.  Hit Ctrl-C to Stop.");
 
             var admin_ip = NetworkInterface.GetAllNetworkInterfaces().Private().First();
-            await Console.Out.WriteLineAsync($"\r{DateTime.Now:s}: The server port is {serverPort}.");
-            await Console.Out.WriteLineAsync($"\r{DateTime.Now:s}: The watchdog endpoint is {admin_ip}:{adminPort}.");
-            await Console.Out.WriteLineAsync($"\r{DateTime.Now:s}: Timeouts are: {clientTimeout}s for clients, and {targetTimeout}s  for targets.");
-            await Console.Out.WriteLineAsync($"\r{DateTime.Now:s}: {(unwise ? "*WARNING* " : string.Empty)}"
+            await Console.Out.WriteLineAsync($"{DateTime.Now:s}: The server port is {serverPort}.");
+            await Console.Out.WriteLineAsync($"{DateTime.Now:s}: The watchdog endpoint is {admin_ip}:{adminPort}.");
+            await Console.Out.WriteLineAsync($"{DateTime.Now:s}: Timeouts are: {clientTimeout}s for clients, and {targetTimeout}s  for targets.");
+            await Console.Out.WriteLineAsync($"{DateTime.Now:s}: {(unwise ? "*WARNING* " : string.Empty)}"
                 + $"Targets with public IPs {(unwise ? "WILL BE" : "will NOT be")} allowed.");
 
             using var cts = new CancellationTokenSource();
 
             Console.CancelKeyPress += (s, a) =>
             {
-                Console.Out.WriteLine($"\r{DateTime.Now:s}: Beginning shutdown procedure.");
+                Console.Out.WriteLine($"{DateTime.Now:s}: Beginning shutdown procedure.");
                 cts.Cancel();
                 a.Cancel = true;
             };
@@ -87,11 +87,11 @@ namespace SimplestLoadBalancer
                         }
                         catch (Exception e)
                         {
-                            await Console.Out.WriteLineAsync($"\r{DateTime.Now:s}: *ERROR* Task {name} encountered a problem: {e.Message}");
+                            await Console.Out.WriteLineAsync($"{DateTime.Now:s}: *ERROR* Task {name} encountered a problem: {e.Message}");
                             await Task.Delay(100); // slow fail
                         }
                     }
-                    await Console.Out.WriteLineAsync($"\r{DateTime.Now:s}: {name} is done.");
+                    await Console.Out.WriteLineAsync($"{DateTime.Now:s}: {name} is done.");
                 });
             }
 
@@ -146,6 +146,7 @@ namespace SimplestLoadBalancer
 
                     var header = payload.Slice(0, 2);
                     var ip = new IPAddress(payload.Slice(2).Slice(0, 4));
+                    if (ip.Equals(IPAddress.Any)) ip = packet.RemoteEndPoint.Address;
                     var port = BitConverter.ToUInt16(payload.Slice(6).Slice(0, 2));
                     var weight = payload.Count > 8 ? payload[8] : defaultTargetWeight;
                     if (weight > 0 && (unwise || IPNetwork.IsIANAReserved(ip)))
@@ -155,18 +156,18 @@ namespace SimplestLoadBalancer
                         {
                             case 0x1111:
                                 backends.AddOrUpdate(ep, ep => (weight, DateTime.Now), (ep, d) => (weight, DateTime.Now));
-                                await Console.Out.WriteLineAsync($"\r{DateTime.Now:s}: Refresh {ep} (weight {weight}).");
+                                await Console.Out.WriteLineAsync($"{DateTime.Now:s}: Refresh {ep} (weight {weight}).");
                                 break;
                             case 0x1186: // see AIEE No. 26
                                 backends.Remove(ep, out var seen);
-                                await Console.Out.WriteLineAsync($"\r{DateTime.Now:s}: Remove {ep}.");
+                                await Console.Out.WriteLineAsync($"{DateTime.Now:s}: Remove {ep}.");
                                 break;
                         }
                     }
-                    else await Console.Out.WriteLineAsync($"\r{DateTime.Now:s}: Rejected {ip}:{port} (weight {weight}).");
+                    else await Console.Out.WriteLineAsync($"{DateTime.Now:s}: Rejected {ip}:{port} (weight {weight}).");
                 }
                 else await Task.Delay(10);
-            };
+            }
 
             // task to remove backends and clients we haven't heard from in a while
             async Task purge()
@@ -176,20 +177,20 @@ namespace SimplestLoadBalancer
                 foreach (var b in remove_backends)
                 {
                     backends.TryRemove(b, out var seen);
-                    await Console.Out.WriteLineAsync($"\r{DateTime.Now:s}: Expired target {b} (last seen {seen:s}).");
+                    await Console.Out.WriteLineAsync($"{DateTime.Now:s}: Expired target {b} (last seen {seen:s}).");
                 }
                 var remove_clients = clients.Where(kv => kv.Value.seen < DateTime.Now.AddSeconds(-clientTimeout)).Select(kv => kv.Key).ToArray();
                 foreach (var c in remove_clients)
                 {
                     clients.TryRemove(c, out var info);
-                    await Console.Out.WriteLineAsync($"\r{DateTime.Now:s}: Expired client {c} (last seen {info.seen:s}).");
+                    await Console.Out.WriteLineAsync($"{DateTime.Now:s}: Expired client {c} (last seen {info.seen:s}).");
                 }
             }
 
             // task to occassionally write statistics to the console
             async Task stats()
             {
-                await Console.Out.WriteAsync($"{new string('\b', 36)}{received}/{relayed}/{responded}, {clients.Count} => {backends.Count}");
+                await Console.Out.WriteLineAsync($"{DateTime.Now:s}: {received}/{relayed}/{responded}, {clients.Count} => {backends.Count}");
                 await Task.Delay(500);
             }
 
@@ -202,7 +203,7 @@ namespace SimplestLoadBalancer
             };
             await Task.WhenAll(tasks);
             var e = string.Join(", ", tasks.Where(t => t.Exception != null).Select(t => t.Exception.Message));
-            await Console.Out.WriteLineAsync($"\r{DateTime.Now:s}: Bye-now ({(e.Any() ? e : "OK")})");
+            await Console.Out.WriteLineAsync($"{DateTime.Now:s}: Bye-now ({(e.Any() ? e : "OK")})");
         }
     }
 }
