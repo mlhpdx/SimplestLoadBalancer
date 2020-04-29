@@ -1,4 +1,4 @@
-![.NET Core](https://github.com/mlhpdx/SimplestLoadBalancer/workflows/.NET%20Core/badge.svg)
+![Build](https://github.com/mlhpdx/SimplestLoadBalancer/workflows/Build/badge.svg)
 [![Maintainability Rating](https://sonarcloud.io/api/project_badges/measure?project=mlhpdx_SimplestLoadBalancer&metric=sqale_rating)](https://sonarcloud.io/dashboard?id=mlhpdx_SimplestLoadBalancer)
 [![Reliability Rating](https://sonarcloud.io/api/project_badges/measure?project=mlhpdx_SimplestLoadBalancer&metric=reliability_rating)](https://sonarcloud.io/dashboard?id=mlhpdx_SimplestLoadBalancer)
 [![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=mlhpdx_SimplestLoadBalancer&metric=security_rating)](https://sonarcloud.io/dashboard?id=mlhpdx_SimplestLoadBalancer)
