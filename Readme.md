@@ -8,6 +8,8 @@
 
 This is **not a production load balancer**, just code that demonstrates sessionless load balancing of UDP traffic. 
 
+![bar](udp-slb.jpg)
+
 ## Why? ##
 
 Some simple UDP protocols are stateless and there is no advantage in trying to maintain "affinity" between clients and back-end instances.  Traditional load balancers assume that affinity is helpful, and so they will try to route packets from one client to one server. By contrast, this code demonstrates a load balancer that evenly (randomly) distributes packets over all available back-ends. One advantage of this approach for "simple" UDP is that if one backend instance fails there will be an increase in packet loss for all clients rather than a loss of all traffic for some clients (as traditional load balancers would do).
@@ -58,6 +60,8 @@ Options:
   --version                                          Show version information
   -?, -h, --help                                     Show help and usage information
 ```
+
+In context of the image at the top of this document, the `--server-point` corresponds to "E1" (the client-facing external port).
 
 To add and maintain targets send periodic UDP packets to the admin port (default 1111) on the first private IPv4 address configured on your machine.  The packet format is very simple, consisting of a couple magic bytes to avoid spurrious adds, four bytes for an ipv4 address and two byes for the port number to target:
 
