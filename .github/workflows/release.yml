@@ -9,6 +9,10 @@ jobs:
   publish:
 
     runs-on: ubuntu-latest
+    
+    strategy:
+        matrix:
+            rid: [win-x64, linux-x64, linux-arm]
 
     steps:
     - uses: actions/checkout@v2
@@ -22,15 +26,15 @@ jobs:
         echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//}
         echo ::set-output name=RELEASE_ID::$(jq --raw-output '.release.id' $GITHUB_EVENT_PATH)
     - name: Publish for Linux
-      run: dotnet publish -o ./slb-linux-x64 -c Release -r linux-x64 /p:PublishSingleFile=true /p:PublishTrimmed=true /p:Version=${{ steps.get_version.outputs.VERSION }}
+      run: dotnet publish -o ./slb-${{ matrix.rid }} -c Release -r ${{ matrix.rid }} /p:PublishSingleFile=true /p:PublishTrimmed=true /p:Version=${{ steps.get_version.outputs.VERSION }}
     - name: Zip it Up
-      run: zip -r -j SimplestLoadBalancer-${{ steps.get_version.outputs.VERSION }}-linux-x64.zip ./slb-linux-x64 
+      run: zip -r -j SimplestLoadBalancer-${{ steps.get_version.outputs.VERSION }}-${{ matrix.rid }}.zip ./slb-${{ matrix.rid }} 
     - name: Upload to Releaase
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         VERSION: ${{ steps.get_version.outputs.VERSION }}
-        FILE: SimplestLoadBalancer-${{ steps.get_version.outputs.VERSION }}-linux-x64.zip
-        URL: https://uploads.github.com/repos/${{ github.repository }}/releases/${{ steps.get_version.outputs.RELEASE_ID }}/assets?name=SimplestLoadBalancer-${{ steps.get_version.outputs.VERSION }}-linux-x64.zip
+        FILE: SimplestLoadBalancer-${{ steps.get_version.outputs.VERSION }}-${{ matrix.rid }}.zip
+        URL: https://uploads.github.com/repos/${{ github.repository }}/releases/${{ steps.get_version.outputs.RELEASE_ID }}/assets?name=SimplestLoadBalancer-${{ steps.get_version.outputs.VERSION }}-${{ matrix.rid }}.zip
       run: |
         echo $VERSION
         echo $URL
