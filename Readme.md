@@ -6,7 +6,7 @@
 
 # Simplest UDP Load Balancer #
 
-This is **not a production load balancer**, just code that demonstrates sessionless load balancing of UDP traffic. 
+This code demonstrates sessionless load balancing of UDP traffic, solving problems inherent with using traditional load balancers for such traffic. 
 
 ![bar](udp-slb.jpg)
 
