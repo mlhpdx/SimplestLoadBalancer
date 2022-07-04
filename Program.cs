@@ -203,7 +203,7 @@ namespace SimplestLoadBalancer
             };
             await Task.WhenAll(tasks);
             var e = string.Join(", ", tasks.Where(t => t.Exception != null).Select(t => t.Exception.Message));
-            await Console.Out.WriteLineAsync($"{DateTime.Now:s}: Bye-now ({(e.Any() ? e : "OK")})");
+            await Console.Out.WriteLineAsync($"{DateTime.Now:s}: Bye-now ({(e.Any() ? e : "OK")}).");
         }
     }
 }
