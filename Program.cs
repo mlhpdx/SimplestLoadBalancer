@@ -101,9 +101,13 @@ namespace SimplestLoadBalancer
 
             // helper to extract the Calling-Station-Id from a RADIUS packet
             string get_station(Memory<byte> buffer) {
-                while (buffer.Span[0] != 31 && buffer.Length >= buffer.Span[1]) buffer = buffer.Slice(buffer.Span[1]);
-                if (buffer.Span[0] == 31) return System.Text.Encoding.UTF8.GetString(buffer.Slice(2, buffer.Span[1]).Span);
-                else return "unknown";
+                if (buffer.Length > 22) { 
+                    buffer = buffer.Slice(20);
+                    while (buffer.Span[0] != 31 && buffer.Length >= buffer.Span[1]) buffer = buffer.Slice(buffer.Span[1]);
+                    if (buffer.Span[0] == 31) 
+                        return System.Text.Encoding.UTF8.GetString(buffer.Slice(2, buffer.Span[1]).Span);
+                }
+                return "unknown";
             }
 
             // task to listen on the server port and relay packets to random backends via a client-specific internal port
