@@ -12,6 +12,8 @@ namespace SimplestLoadBalancer
 {
     static class Extensions
     {
+        public static IEnumerable<int> Enumerate(this (int from, int to) range) => Enumerable.Range(range.from, range.to - range.from + 1);
+
         static readonly Random rand = new Random();
         public static K Random<K, V>(this IDictionary<K, (byte weight, V)> items)
         {
@@ -47,18 +49,24 @@ namespace SimplestLoadBalancer
         /// <summary>
         /// Sessionless UDP Load Balancer sends packets to targets without session affinity.
         /// </summary>
-        /// <param name="serverPort">Set the port to listen to and forward to backend targets (default 1812)</param>
+        /// <param name="serverPortRange">Set the ports to listen to and forward to backend targets (default "1812-1813")</param>
         /// <param name="adminPort">Set the port that targets will send watchdog events (default 1111)</param>
         /// <param name="clientTimeout">Seconds to allow before cleaning-up idle clients (default 30)</param>
         /// <param name="targetTimeout">Seconds to allow before removing target missing watchdog events (default 30)</param>
         /// <param name="defaultTargetWeight">Weight to apply to targets when not specified (default 100)</param>
         /// <param name="unwise">Allows public IP addresses for targets (default is to only allow private IPs)</param>
-        static async Task Main(int serverPort = 1812, int adminPort = 1111, uint clientTimeout = 30, uint targetTimeout = 30, byte defaultTargetWeight = 100, bool unwise = false)
+        static async Task Main(string serverPortRange = "1812-1813", int adminPort = 1111, uint clientTimeout = 30, uint targetTimeout = 30, byte defaultTargetWeight = 100, bool unwise = false)
         {
+            var ports = serverPortRange.Split("-", StringSplitOptions.RemoveEmptyEntries) switch {
+                string[] a when a.Length == 1 => new[] { int.Parse(a[0]) },
+                string[] a when a.Length == 2 => (from: int.Parse(a[0]), to: int.Parse(a[1])).Enumerate().ToArray(),
+                _ => throw new Exception($"Invalid server port range: {serverPortRange}.")
+            };
+
             await Console.Out.WriteLineAsync($"{DateTime.Now:s}: Welcome to the simplest UDP Load Balancer.  Hit Ctrl-C to Stop.");
 
             var admin_ip = NetworkInterface.GetAllNetworkInterfaces().Private().First();
-            await Console.Out.WriteLineAsync($"{DateTime.Now:s}: The server port is {serverPort}.");
+            await Console.Out.WriteLineAsync($"{DateTime.Now:s}: The server port range is {serverPortRange} ({ports.Length} port{(ports.Length > 1 ? "s" : "")}).");
             await Console.Out.WriteLineAsync($"{DateTime.Now:s}: The watchdog endpoint is {admin_ip}:{adminPort}.");
             await Console.Out.WriteLineAsync($"{DateTime.Now:s}: Timeouts are: {clientTimeout}s for clients, and {targetTimeout}s  for targets.");
             await Console.Out.WriteLineAsync($"{DateTime.Now:s}: {(unwise ? "*WARNING* " : string.Empty)}"
@@ -96,40 +104,46 @@ namespace SimplestLoadBalancer
             }
 
             var backends = new ConcurrentDictionary<IPEndPoint, (byte weight, DateTime seen)>();
-            var clients = new ConcurrentDictionary<IPEndPoint, (UdpClient client, DateTime seen)>();
+            var clients = new ConcurrentDictionary<(IPEndPoint remote, int external_port), (UdpClient internal_client, DateTime seen)>();
+            var servers = ports.ToDictionary(p => p, p => new UdpClient(p).Configure());
+
+            // helper to get requests (inbound packets from external sources) asyncronously
+            async IAsyncEnumerable<(UdpReceiveResult result, int port)> requests()
+            {
+                foreach (var s in servers)
+                    if (s.Value.Available > 0)
+                        yield return (await s.Value.ReceiveAsync(), s.Key);
+            }
 
             // task to listen on the server port and relay packets to random backends via a client-specific internal port
-            using var server = new UdpClient(serverPort).Configure();
             async Task relay()
             {
-                if (server.Available > 0)
-                {
-                    var packet = await server.ReceiveAsync();
-
+                long temp = received;
+                await foreach(var (request, port) in requests()) {
                     Interlocked.Increment(ref received);
 
-                    var client = clients.AddOrUpdate(packet.RemoteEndPoint, ep => (new UdpClient().Configure(), DateTime.Now), (ep, c) => (c.client, DateTime.Now));
+                    var client = clients.AddOrUpdate((request.RemoteEndPoint, port), ep => (new UdpClient().Configure(), DateTime.Now), (ep, c) => (c.internal_client, DateTime.Now));
                     var backend = backends.Random();
-                    backend?.SendVia(client.client, packet.Buffer, s => Interlocked.Increment(ref relayed));
+                    backends.Random()?.SendVia(client.internal_client, request.Buffer, s => Interlocked.Increment(ref relayed));
                 }
-                else await Task.Delay(10);
+                if (temp == received) await Task.Delay(10); // slack the loop
             }
 
             // helper to get replies asyncronously
-            async IAsyncEnumerable<(UdpReceiveResult result, IPEndPoint ep)> replies()
+            async IAsyncEnumerable<(UdpReceiveResult result, IPEndPoint ep, int port)> replies()
             {
                 foreach (var c in clients)
-                    if (c.Value.client.Available > 0)
-                        yield return (await c.Value.client.ReceiveAsync(), c.Key);
+                    if (c.Value.internal_client.Available > 0)
+                        yield return (await c.Value.internal_client.ReceiveAsync(), c.Key.remote, c.Key.external_port);
             }
 
             // task to listen for responses from backends and re-send them to the correct external client
             async Task reply()
             {
                 var any = false;
-                await foreach (var (result, ep) in replies())
+                await foreach (var (result, ep, port) in replies())
                 {
-                    server.BeginSend(result.Buffer, result.Buffer.Length, ep, s => Interlocked.Increment(ref responded), null);
+                    servers[port].BeginSend(result.Buffer, result.Buffer.Length, ep, s => Interlocked.Increment(ref responded), null);
                     any = true;
                 }
                 if (!any) await Task.Delay(10);
