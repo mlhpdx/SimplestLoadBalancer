@@ -97,6 +97,14 @@ namespace SimplestLoadBalancer
 
             var backends = new ConcurrentDictionary<IPEndPoint, (byte weight, DateTime seen)>();
             var clients = new ConcurrentDictionary<IPEndPoint, (UdpClient client, DateTime seen)>();
+            var stations = new ConcurrentDictionary<string, (IPEndPoint backend, DateTime seen)>();
+
+            // helper to extract the Calling-Station-Id from a RADIUS packet
+            string get_station(Memory<byte> buffer) {
+                while (buffer.Span[0] != 31 && buffer.Length >= buffer.Span[1]) buffer = buffer.Slice(buffer.Span[1]);
+                if (buffer.Span[0] == 31) return System.Text.Encoding.UTF8.GetString(buffer.Slice(2, buffer.Span[1]).Span);
+                else return "unknown";
+            }
 
             // task to listen on the server port and relay packets to random backends via a client-specific internal port
             using var server = new UdpClient(serverPort).Configure();
@@ -109,8 +117,8 @@ namespace SimplestLoadBalancer
                     Interlocked.Increment(ref received);
 
                     var client = clients.AddOrUpdate(packet.RemoteEndPoint, ep => (new UdpClient().Configure(), DateTime.Now), (ep, c) => (c.client, DateTime.Now));
-                    var backend = backends.Random();
-                    backend?.SendVia(client.client, packet.Buffer, s => Interlocked.Increment(ref relayed));
+                    var station = stations.AddOrUpdate(get_station(packet.Buffer), csid => (backends.Random(), DateTime.Now), (csid, s) => (s.backend, DateTime.Now));
+                    station.backend?.SendVia(client.client, packet.Buffer, s => Interlocked.Increment(ref relayed));
                 }
                 else await Task.Delay(10);
             }
@@ -184,6 +192,13 @@ namespace SimplestLoadBalancer
                 {
                     clients.TryRemove(c, out var info);
                     await Console.Out.WriteLineAsync($"{DateTime.Now:s}: Expired client {c} (last seen {info.seen:s}).");
+                }
+                var remove_stations = stations.Where(kv => kv.Value.seen < DateTime.Now.AddSeconds(-clientTimeout)
+                    || !backends.ContainsKey(kv.Value.backend)).Select(kv => kv.Key).ToArray();
+                foreach (var s in remove_stations)
+                {
+                    stations.TryRemove(s, out var info);
+                    await Console.Out.WriteLineAsync($"{DateTime.Now:s}: Expired station {s} (last seen {info.seen:s}).");
                 }
             }
 
