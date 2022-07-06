@@ -5,6 +5,7 @@ using System.Linq;
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -115,8 +116,8 @@ namespace SimplestLoadBalancer
                     buffer = buffer.Slice(20);
                     while (buffer.Length > 0 && buffer.Length >= buffer.Span[1]) {
                         switch (buffer.Span[0]) { 
-                            case 31: calling = System.Text.Encoding.UTF8.GetString(buffer.Slice(2, buffer.Span[1]).Span); break;
-                            case 32: called = System.Text.Encoding.UTF8.GetString(buffer.Slice(2, buffer.Span[1]).Span); break;
+                            case 31: calling = Encoding.UTF8.GetString(buffer.Slice(2, buffer.Span[1]).Span); break;
+                            case 32: called = Encoding.UTF8.GetString(buffer.Slice(2, buffer.Span[1]).Span); break;
                         }
                         buffer = buffer.Slice(buffer.Span[1]);
                     }
@@ -141,7 +142,7 @@ namespace SimplestLoadBalancer
 
                     var client = clients.AddOrUpdate((request.RemoteEndPoint, port), ep => (new UdpClient().Configure(), DateTime.Now), (ep, c) => (c.internal_client, DateTime.Now));
                     var station = get_station(request.Buffer);
-                    var session = stations.AddOrUpdate($"{station.called}-{station.calling}-{port}", csid => (backends.Random(), DateTime.Now), (csid, s) => (s.backend, DateTime.Now));
+                    var session = backends.Any() ? stations.AddOrUpdate($"{station.called}-{station.calling}-{port}", csid => (backends.Random(), DateTime.Now), (csid, s) => (s.backend, DateTime.Now)) : (null, DateTime.Now);
                     session.backend?.SendVia(client.internal_client, request.Buffer, s => Interlocked.Increment(ref relayed));
                 }
                 if (temp == received) await Task.Delay(10); // slack the loop
