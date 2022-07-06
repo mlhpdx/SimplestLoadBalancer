@@ -32,13 +32,13 @@ $ dotnet run
 If you'd like to generate a single-file executable, which is convenient just target the platform you'll be running on. For Linux:
 
 ```
-dotnet publish -o ./ -c Release -r linux-x64 /p:PublishSingleFile=true /p:PublishTrimmed=true
+dotnet publish -o ./ -c Release -r linux-x64 /p:PublishSingleFile=true /p:PublishTrimmed=true --self-contained
 ```
 
 Or for Windows:
 
 ```
-dotnet publish -o ./ -c Release -r win10-x64 /p:PublishSingleFile=true /p:PublishTrimmed=true
+dotnet publish -o ./ -c Release -r win10-x64 /p:PublishSingleFile=true /p:PublishTrimmed=true --self-contained
 ```
 
 By default the process will listen on port `1812` for any incomming UDP packets and relay them one to one of the IP addres/port targets it knows.  You can control the port it listens on with the `--server-port` option.  Other options are described in the command help:
