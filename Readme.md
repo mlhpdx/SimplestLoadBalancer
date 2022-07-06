@@ -1,22 +1,16 @@
-![Build](https://github.com/mlhpdx/SimplestLoadBalancer/workflows/Build/badge.svg)
-[![Maintainability Rating](https://sonarcloud.io/api/project_badges/measure?project=mlhpdx_SimplestLoadBalancer&metric=sqale_rating)](https://sonarcloud.io/dashboard?id=mlhpdx_SimplestLoadBalancer)
-[![Reliability Rating](https://sonarcloud.io/api/project_badges/measure?project=mlhpdx_SimplestLoadBalancer&metric=reliability_rating)](https://sonarcloud.io/dashboard?id=mlhpdx_SimplestLoadBalancer)
-[![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=mlhpdx_SimplestLoadBalancer&metric=security_rating)](https://sonarcloud.io/dashboard?id=mlhpdx_SimplestLoadBalancer)
-[![Lines of Code](https://sonarcloud.io/api/project_badges/measure?project=mlhpdx_SimplestLoadBalancer&metric=ncloc)](https://sonarcloud.io/dashboard?id=mlhpdx_SimplestLoadBalancer)
+# RADIUS SLB #
 
-# Simplest UDP Load Balancer #
-
-This code demonstrates sessionless load balancing of UDP traffic, solving problems inherent with using traditional load balancers for such traffic. 
+This fork adds session-like load balancing of RADIUS traffic to SLB using the Calling-Station-Id attribute as the session key. 
 
 ![bar](udp-slb.jpg)
 
 ## Why? ##
 
-Some simple UDP protocols are stateless and there is no advantage in trying to maintain "affinity" between clients and back-end instances.  Traditional load balancers assume that affinity is helpful, and so they will try to route packets from one client to one server. By contrast, this code demonstrates a load balancer that evenly (randomly) distributes packets over all available back-ends. One advantage of this approach for "simple" UDP is that if one backend instance fails there will be an increase in packet loss for all clients rather than a loss of all traffic for some clients (as traditional load balancers would do).
+RADIUS is a UDP protocol but implements session-like behavior in some variations (e.g. EAP). However, the session affinity isn't best keyed on IP addresses and ports, but the internal contents of the messages.  For EAP message exchanges to complete successfully, all packets from a suplicant must be handled with the knowledge of previous packets in the conversation (i.e. the "state") and in general that means they must be handled by the same backend server.  This variation of SimplestLoadBalancer uses Calling-Station-Id as the key for sessions.  When new Calling-Station-Id values are seen, a random backend is chosen and recorded and future packets will be sent to the same backend.  If there is a lack of messages with the Calling-Station-Id for the client timeout period, the recorded backend is discarded and a new backend will be chosen if more such packets subsequently arrive. 
 
 ## Building ##
 
-This is a very simple .Net Core 3.1 project, so to build (assuming you have the SDK installed):
+This is a very simple .Net Core 6 project, so to build (assuming you have the SDK installed):
 
 ```
 dotnet build
