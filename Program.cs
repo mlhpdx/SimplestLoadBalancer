@@ -22,8 +22,8 @@ namespace SimplestLoadBalancer
             return items.FirstOrDefault(kv => (n -= kv.Value.weight) < 0).Key;
         }
 
-        public static void SendVia(this IPEndPoint ep, UdpClient client, byte[] packet, AsyncCallback cb) =>
-            client.BeginSend(packet, packet.Length, ep, cb, null);
+        public static void SendVia(this IPEndPoint backend, UdpClient client, byte[] packet, AsyncCallback cb) =>
+            client.BeginSend(packet, packet.Length, backend, cb, null);
 
         public static IEnumerable<IPAddress> Private(this NetworkInterface[] interfaces) =>
             interfaces.Where(i => i.OperationalStatus == OperationalStatus.Up)
@@ -104,7 +104,7 @@ namespace SimplestLoadBalancer
                 });
             }
 
-            var backends = new ConcurrentDictionary<IPEndPoint, (byte weight, DateTime seen)>();
+            var backends = new ConcurrentDictionary<IPAddress, (byte weight, DateTime seen)>();
             var clients = new ConcurrentDictionary<(IPEndPoint remote, int external_port), (UdpClient internal_client, DateTime seen)>();
             var servers = ports.ToDictionary(p => p, p => new UdpClient(p).Configure());
             var stations = new ConcurrentDictionary<string, (IPEndPoint backend, DateTime seen)>();
@@ -116,8 +116,8 @@ namespace SimplestLoadBalancer
                     buffer = buffer.Slice(20);
                     while (buffer.Length > 0 && buffer.Length >= buffer.Span[1]) {
                         switch (buffer.Span[0]) { 
-                            case 31: calling = Encoding.UTF8.GetString(buffer.Slice(2, buffer.Span[1]).Span); break;
-                            case 32: called = Encoding.UTF8.GetString(buffer.Slice(2, buffer.Span[1]).Span); break;
+                            case 30: called = Encoding.UTF8.GetString(buffer.Slice(2, buffer.Span[1] - 2).Span); break;
+                            case 31: calling = Encoding.UTF8.GetString(buffer.Slice(2, buffer.Span[1] - 2).Span); break;
                         }
                         buffer = buffer.Slice(buffer.Span[1]);
                     }
@@ -142,7 +142,7 @@ namespace SimplestLoadBalancer
 
                     var client = clients.AddOrUpdate((request.RemoteEndPoint, port), ep => (new UdpClient().Configure(), DateTime.Now), (ep, c) => (c.internal_client, DateTime.Now));
                     var station = get_station(request.Buffer);
-                    var session = backends.Any() ? stations.AddOrUpdate($"{station.called}-{station.calling}-{port}", csid => (backends.Random(), DateTime.Now), (csid, s) => (s.backend, DateTime.Now)) : (null, DateTime.Now);
+                    var session = backends.Any() ? stations.AddOrUpdate($"{station.called}-{station.calling}-{port}", csid => (new IPEndPoint(backends.Random(), port), DateTime.Now), (csid, s) => (s.backend, DateTime.Now)) : (null, DateTime.Now);
                     session.backend?.SendVia(client.internal_client, request.Buffer, s => Interlocked.Increment(ref relayed));
                 }
                 if (temp == received) await Task.Delay(10); // slack the loop
@@ -180,24 +180,22 @@ namespace SimplestLoadBalancer
                     var header = payload.Slice(0, 2);
                     var ip = new IPAddress(payload.Slice(2).Slice(0, 4));
                     if (ip.Equals(IPAddress.Any)) ip = packet.RemoteEndPoint.Address;
-                    var port = BitConverter.ToUInt16(payload.Slice(6).Slice(0, 2));
                     var weight = payload.Count > 8 ? payload[8] : defaultTargetWeight;
                     if (weight > 0 && (unwise || IPNetwork.IsIANAReserved(ip)))
                     {
-                        var ep = new IPEndPoint(ip, port);
                         switch (BitConverter.ToInt16(header))
                         {
                             case 0x1111:
-                                backends.AddOrUpdate(ep, ep => (weight, DateTime.Now), (ep, d) => (weight, DateTime.Now));
-                                await Console.Out.WriteLineAsync($"{DateTime.Now:s}: Refresh {ep} (weight {weight}).");
+                                backends.AddOrUpdate(ip, ip => (weight, DateTime.Now), (ep, d) => (weight, DateTime.Now));
+                                await Console.Out.WriteLineAsync($"{DateTime.Now:s}: Refresh {ip} (weight {weight}).");
                                 break;
                             case 0x1186: // see AIEE No. 26
-                                backends.Remove(ep, out var seen);
-                                await Console.Out.WriteLineAsync($"{DateTime.Now:s}: Remove {ep}.");
+                                backends.Remove(ip, out var seen);
+                                await Console.Out.WriteLineAsync($"{DateTime.Now:s}: Remove {ip}.");
                                 break;
                         }
                     }
-                    else await Console.Out.WriteLineAsync($"{DateTime.Now:s}: Rejected {ip}:{port} (weight {weight}).");
+                    else await Console.Out.WriteLineAsync($"{DateTime.Now:s}: Rejected {ip} (weight {weight}).");
                 }
                 else await Task.Delay(10);
             }
@@ -218,12 +216,17 @@ namespace SimplestLoadBalancer
                     clients.TryRemove(c, out var info);
                     await Console.Out.WriteLineAsync($"{DateTime.Now:s}: Expired client {c} (last seen {info.seen:s}).");
                 }
-                var remove_stations = stations.Where(kv => kv.Value.seen < DateTime.Now.AddSeconds(-clientTimeout)
-                    || !backends.ContainsKey(kv.Value.backend)).Select(kv => kv.Key).ToArray();
-                foreach (var s in remove_stations)
+                var remove_expired_stations = stations.Where(kv => kv.Value.seen < DateTime.Now.AddSeconds(-clientTimeout)).Select(kv => kv.Key).ToArray();
+                foreach (var s in remove_expired_stations)
                 {
                     stations.TryRemove(s, out var info);
                     await Console.Out.WriteLineAsync($"{DateTime.Now:s}: Expired station {s} (last seen {info.seen:s}).");
+                }
+                var remove_orphaned_stations = stations.Where(kv => !backends.ContainsKey(kv.Value.backend.Address)).Select(kv => kv.Key).ToArray();
+                foreach (var s in remove_orphaned_stations)
+                {
+                    stations.TryRemove(s, out var info);
+                    await Console.Out.WriteLineAsync($"{DateTime.Now:s}: Orphaned station {s} (last seen {info.seen:s}).");
                 }
             }
 
