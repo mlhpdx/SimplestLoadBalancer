@@ -22,13 +22,6 @@ This is a very simple .Net Core 3.1 project, so to build (assuming you have the 
 dotnet build
 ```
 
-## Usage ##
-Likewise, it's simple to run using `dotnet run` in the project directory:
-
-```
-$ dotnet run
-```
-
 If you'd like to generate a single-file executable, which is convenient just target the platform you'll be running on. For Linux:
 
 ```
@@ -41,7 +34,21 @@ Or for Windows:
 dotnet publish -o ./ -c Release -r win10-x64 /p:PublishSingleFile=true /p:PublishTrimmed=true --self-contained
 ```
 
-By default the process will listen on port `1812` for any incomming UDP packets and relay them one to one of the IP addres/port targets it knows.  You can control the port it listens on with the `--server-port` option.  Other options are described in the command help:
+## Usage ##
+Likewise, it's simple to run using `dotnet run` in the project directory:
+
+```
+$ dotnet run
+```
+
+Or, if you've build a native executable:
+
+```
+$ ./SimplestLoadBalancer
+```
+
+
+By default the process will listen on ports `1812` and 1813 for any incomming UDP packets and will relay them one to one of the IP addres/port targets it knows.  You can control the port it listens on with the `--server-port-range` option.  Other options are described in the command help:
 
 ```
 SimplestLoadBalancer:
@@ -51,7 +58,7 @@ Usage:
   SimplestLoadBalancer [options]
 
 Options:
-  --server-port <server-port>                        Set the port to listen to and forward to backend targets (default 1812)
+  --server-port-range <server-port-range>            Set the port to listen to and forward to backend targets (default "1812-1813")
   --admin-port <admin-port>                          Set the port that targets will send watchdog events (default 1111)
   --client-timeout <client-timeout>                  Seconds to allow before cleaning-up idle clients (default 30)
   --target-timeout <target-timeout>                  Seconds to allow before removing target missing watchdog events (default 30)
@@ -61,7 +68,7 @@ Options:
   -?, -h, --help                                     Show help and usage information
 ```
 
-In context of the image at the top of this document, the `--server-point` corresponds to "E1" (the client-facing external port).
+In context of the image at the top of this document, the `--server-point-range` corresponds to "E1" (the client-facing external port).
 
 To add and maintain targets send periodic UDP packets to the admin port (default 1111) on the first private IPv4 address configured on your machine.  The packet format is very simple, consisting of a couple magic bytes to avoid spurrious adds, four bytes for an ipv4 address and two byes for the port number to target:
 
@@ -69,15 +76,15 @@ To add and maintain targets send periodic UDP packets to the admin port (default
 0x11 0x11 [four bytes for ip] [two bytes for port] [one byte for weight (optional)]
 ```
 
-Each time such a packet is received the backend's "last seen" time is updated. The weight is optional, and if not in the packet the value specified at the command line will be used.  Weights are applied in the traditional manner.  
+The weight is optional, and if not in the packet the value specified at the command line will be used.  Weights are applied in the traditional manner.  
 
-If 30 seconds passes without a backend being seen, it is removed. To immeadiately remove a target send a packet with 0x86 as the first byte instead of 0x11:
+Each time such a packet is received the backend's "last seen" time is updated. If 30 seconds passes without a backend being seen, it is removed. To immeadiately remove a target send a packet with 0x86 as the first byte instead of 0x11:
 
 ```
 0x86 0x11 [four bytes for ip] [two bytes for port]
 ```
 
-Using Linux bash, it's easy to send those packets to `/dev/udp/[admin ip]/[admin port]`. For example, if your load balancer is listening on the default admin port `1111` at `192.168.1.11`, and you want to add a target with the IP `192.168.1.22` and port number `1812`:
+Using Linux `bash` it's easy to send those packets using the filesystem object `/dev/udp/[admin ip]/[admin port]`. For example, if your load balancer is listening on the default admin port `1111` at `192.168.1.11`, and you want to add a target with the IP `192.168.1.22` and port number `1812`:
 
 ```bash
 $ echo -e $(echo  "\x11\x11$(echo "192.168.1.22" | tr "." "\n" | xargs printf '\\x%02X')\x14\x07") > /dev/udp/192.168.1.11/1111
