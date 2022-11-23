@@ -143,6 +143,7 @@ namespace SimplestLoadBalancer
                     var client = clients.AddOrUpdate((request.RemoteEndPoint, port), ep => (new UdpClient().Configure(), DateTime.Now), (ep, c) => (c.internal_client, DateTime.Now));
                     var station = get_station(request.Buffer);
                     var session = backends.Any() ? stations.AddOrUpdate($"{station.called}-{station.calling}-{port}", csid => (new IPEndPoint(backends.Random(), port), DateTime.Now), (csid, s) => (s.backend, DateTime.Now)) : (null, DateTime.Now);
+                    await Console.Out.WriteAsync($"{DateTime.Now:s}: External packet ({request.Buffer.Length} bytes) from {request.RemoteEndPoint} to listening port {port} sent to backend {session.backend}.");
                     session.backend?.SendVia(client.internal_client, request.Buffer, s => Interlocked.Increment(ref relayed));
                 }
                 if (temp == received) await Task.Delay(10); // slack the loop
@@ -162,6 +163,7 @@ namespace SimplestLoadBalancer
                 var any = false;
                 await foreach (var (result, ep, port) in replies())
                 {
+                    await Console.Out.WriteAsync($"{DateTime.Now:s}: Backend packet ({result.Buffer.Length} bytes) from {result.RemoteEndPoint} to SLB port {port} reply sent to external {servers[port].Client.RemoteEndPoint}.");
                     servers[port].BeginSend(result.Buffer, result.Buffer.Length, ep, s => Interlocked.Increment(ref responded), null);
                     any = true;
                 }
