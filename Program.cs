@@ -21,9 +21,6 @@ namespace SimplestLoadBalancer
             return items.FirstOrDefault(kv => (n -= kv.Value.weight) < 0).Key;
         }
 
-        public static void SendVia(this IPEndPoint ep, UdpClient client, byte[] packet, AsyncCallback cb) =>
-            client.BeginSend(packet, packet.Length, ep, cb, null);
-
         public static IEnumerable<IPAddress> Private(this NetworkInterface[] interfaces) =>
             interfaces.Where(i => i.OperationalStatus == OperationalStatus.Up)
                 .Where(i => i.NetworkInterfaceType != NetworkInterfaceType.Loopback)
@@ -39,7 +36,24 @@ namespace SimplestLoadBalancer
 //            client.Client.IOControl((IOControlCode)SIO_UDP_CONNRESET, new byte[] { 0, 0, 0, 0 }, null); // don't throw on disconnect
             return client;
         }
+
+        private static UdpClient MakeSinglecastClient(this IPEndPoint ep) => new UdpClient(ep).Configure();
+        
+        private static UdpClient MakeMulticastClient(this IPEndPoint ep) {
+            var udp = new UdpClient(new IPEndPoint(IPAddress.Any, ep.Port));
+            udp.JoinMulticastGroup(ep.Address);
+            return udp.Configure();
+        }
+        
+        private static bool IsMulticast(this IPAddress ip) => ip.IsIPv6Multicast || 
+            (ip.AddressFamily == AddressFamily.InterNetwork && (ip.GetAddressBytes()[0] & 0b11100000) == 0b11100000);
+
+        public static UdpClient MakeUdpClient(this IPEndPoint ep) => ep.Address.IsMulticast() ? ep.MakeMulticastClient() : ep.MakeSinglecastClient();
+
+        public static void SendVia(this IPEndPoint ep, UdpClient client, byte[] packet, AsyncCallback cb) =>
+            client.BeginSend(packet, packet.Length, ep, cb, null);
     }
+
     static class Program
     {
         static long received = 0L;
@@ -51,13 +65,12 @@ namespace SimplestLoadBalancer
         /// </summary>
         /// <param name="serverPortRange">Set the ports to listen to and forward to backend targets (default "1812-1813")</param>
         /// <param name="adminIp">Set the IP to listen on for watchdog events (default is first private IP)</param>
-        /// <param name="adminMulticastGroup">Set the admin mulicast IP for this SLB to join (default is none)</param>  
         /// <param name="adminPort">Set the port that targets will send watchdog events (default 1111)</param>
         /// <param name="clientTimeout">Seconds to allow before cleaning-up idle clients (default 30)</param>
         /// <param name="targetTimeout">Seconds to allow before removing target missing watchdog events (default 30)</param>
         /// <param name="defaultTargetWeight">Weight to apply to targets when not specified (default 100)</param>
         /// <param name="unwise">Allows public IP addresses for targets (default is to only allow private IPs)</param>
-        static async Task Main(string serverPortRange = "1812-1813", IPAddress adminIp = default, IPAddress adminMulticastGroup = default,  int adminPort = 1111, uint clientTimeout = 30, uint targetTimeout = 30, byte defaultTargetWeight = 100, bool unwise = false)
+        static async Task Main(string serverPortRange = "1812-1813", IPAddress adminIp = default,  int adminPort = 1111, uint clientTimeout = 30, uint targetTimeout = 30, byte defaultTargetWeight = 100, bool unwise = false)
         {
             var ports = serverPortRange.Split("-", StringSplitOptions.RemoveEmptyEntries) switch {
                 string[] a when a.Length == 1 => new[] { int.Parse(a[0]) },
@@ -70,7 +83,6 @@ namespace SimplestLoadBalancer
             var admin_ip = adminIp ?? NetworkInterface.GetAllNetworkInterfaces().Private().First();
             await Console.Out.WriteLineAsync($"{DateTime.Now:s}: The server port range is {serverPortRange} ({ports.Length} port{(ports.Length > 1 ? "s" : "")}).");
             await Console.Out.WriteLineAsync($"{DateTime.Now:s}: The watchdog endpoint is {admin_ip}:{adminPort}.");
-            await Console.Out.WriteLineAsync($"{DateTime.Now:s}: The multicast group is {adminMulticastGroup?.ToString() ?? "<none>"}.");
             await Console.Out.WriteLineAsync($"{DateTime.Now:s}: Timeouts are: {clientTimeout}s for clients, and {targetTimeout}s  for targets.");
             await Console.Out.WriteLineAsync($"{DateTime.Now:s}: {(unwise ? "*WARNING* " : string.Empty)}"
                 + $"Targets with public IPs {(unwise ? "WILL BE" : "will NOT be")} allowed.");
@@ -153,8 +165,7 @@ namespace SimplestLoadBalancer
             }
 
             // task to listen for instances asking to add/remove themselves as a target (watch-dog pattern)
-            using var control = new UdpClient(new IPEndPoint(admin_ip, adminPort)).Configure();
-            if (adminMulticastGroup != default) control.JoinMulticastGroup(adminMulticastGroup, admin_ip);
+            using var control = new IPEndPoint(admin_ip, adminPort).MakeUdpClient();
             async Task admin()
             {
                 if (control.Available > 0)
