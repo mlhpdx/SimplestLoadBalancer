@@ -240,7 +240,7 @@ namespace SimplestLoadBalancer
 
                 case [0x86, 0x11, .. var command]:
                   {// see AIEE No. 26
-                    (var ip, var weight, var group_id) = get_ip_weight_and_group(command);
+                    (var ip, var _, var group_id) = get_ip_weight_and_group(command);
                     if (backend_groups.TryGetValue(group_id, out var group))
                       group.Remove(ip, out var seen);
                     await Console.Out.WriteLineAsync($"{DateTime.UtcNow:s}: Remove {ip} from group {group_id}.");
@@ -281,7 +281,7 @@ namespace SimplestLoadBalancer
       async Task stats()
       {
         await Console.Out.WriteLineAsync($"{DateTime.UtcNow:s}: {received}/{relayed}/{responded}, {clients.Count} => {backend_groups.Count}/{backend_groups.Sum(g => g.Value.Count)}({backend_groups.Values.SelectMany(g => g).Distinct().Count()})");
-        try { await Task.Delay(statsPeriodMs, cts.Token); } catch { } // supress cancel
+        try { await Task.Delay(statsPeriodMs, cts.Token); } catch { /* suppress cancel */ }
       }
 
       var tasks = new[] {
