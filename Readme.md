@@ -6,7 +6,7 @@
 
 # Simplest UDP Load Balancer (slb) #
 
-SLB is a sessionless load balancing of UDP traffic and solves problems inherent with using traditional (feature rich) load balancers for such traffic. 
+SLB is a sessionless load balancer for UDP traffic, and solves problems inherent with using traditional (feature rich) load balancers for such traffic. 
 
 ![where slb fits](udp-slb.jpg)
 
