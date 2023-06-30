@@ -75,12 +75,12 @@ In some environments registration packets won't be sent from backends themselves
 
 ```
 0x11 0x11 X X X X [X] [X]
-           ^       ^   ^
-           |       |   |
-           |       |  one byte for group id
-           |       |
-           |      one byte for weight
-           |
+          ^        ^   ^
+          |        |   |
+          |        |  one byte for group id
+          |        |
+          |       one byte for weight
+          |
           four bytes for ip to add
 ```
 
@@ -142,7 +142,7 @@ However, it's possible to assign individual ports to subsets of backends using S
           |   |
           |  one byte for group ID
           |
-        two bytes for port number, litten endian 
+         two bytes for port number, litten endian 
 ```
 
 ## Sending Admin Packets with Bash ## 
