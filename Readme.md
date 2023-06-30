@@ -6,7 +6,7 @@
 
 # Simplest UDP Load Balancer (slb) #
 
-SLB is a sessionless load balancing of UDP traffic and solves problems inherent with using traditional (for feature rich) load balancers for such traffic. 
+SLB is a sessionless load balancing of UDP traffic and solves problems inherent with using traditional (feature rich) load balancers for such traffic. 
 
 ![where slb fits](udp-slb.jpg)
 
@@ -42,12 +42,53 @@ Options:
 
 ## Making SLB Aware of Backends ##
 
-Backends can't be setup at the commandline. To add and maintain backend targets, periodic UDP packets must be sent to the admin port (`--admin-port`). There are a couple things to consider here:
+Backends aren't setup at the command line. Rather, they are dynamically registered and de-registered using periodic UDP packets sent to the admin port (`--admin-port`). The content of those packets may differ based on how you use SLB in your environment.
 
-- If you're running a single SLB server then backends can be configured to send packets to that one IP and port.
-- When a more robust HA deployment with multiple SLBs is needed, the backends should be configured to send admin packets to each so that all the SLBs are aware of each backend. That can be cumbersome when SLB servers are rotated in and out of service (e.g. when using autoscaling or spot instances).  In such a case the SLB servers should make use of the option to configure a multicast IP with `--admin-ip` which will cause the SLBs to join the same multicast group. This way the backends can be configured with a single IP and packets will automatically be delivered to all SLB servers (yay, networking!). Of course, this requires that you have a switch that supports multicast, or are running in an AWS VPC configured with a [multicast domain](https://docs.aws.amazon.com/vpc/latest/tgw/tgw-multicast-overview.html).
+### Single SLB ### 
 
-The admin packet format is very simple as of version 2.0. A packet from a backend to SLB may consist of nothing more than two magic bytes (`0x11` `0x11`). Optionally, the packets can come from a different source (e.g. a management server) and incude four more bytes to specify the ipv4 address of a backend. In either case, two additional optional bytes for traffic "weight" relative to other backends, and for the "group" to assign to the backend may be appended (more about groups below). In ASCII art:
+If you're running a single SLB server, backends can be configured to send packets to that one IP and on the admin port. This is the simplest scenario. Each backend will send messages with two "magic bytes" to indicate "backend registration" for content:
+
+```
+0x11 0x11
+```
+
+SLB will interpret such a packet as "register the sender as a backend".  Optionally, the messages can contain one or two additional bytes (weight and group ID) whose purpose will be discussed in more detail below.
+
+```
+0x11 0x11 [X] [X]
+           ^   ^
+           |   |
+           |  one byte for group id
+           |
+          one byte for weight
+```
+
+### SLB with Management Server
+
+In some environments registration packets won't be sent from backends themselves, and SLB supports such use cases. When a registration packet is sent from a "third party" the content will need to include the IP address of the backend being registered:
+
+```
+0x11 0x11 X X X X [X] [X]
+           ^       ^   ^
+           |       |   |
+           |       |  one byte for group id
+           |       |
+           |      one byte for weight
+           |
+          four bytes for ip to add
+```
+
+Again, the weight and group ID bytes may optionally be appended.
+
+### SLB in a High Availability Environment
+ 
+When a more robust HA deployment with multiple SLBs is needed the communication between backends and SLB can be simplied by using a multicast group IP. This is helpful since each SLB must be aware of each backend. In such a case the SLB servers should make use the `--admin-ip` option to specify a multicast address which will cause the SLBs to join the multicast group and hence all receive any message sent to that IP. The backends can be configured with that single IP, minimizing their workload and simplifying their configuration (particularly when SLBs are rotated in and out of service due to autoscaling and/or the use of spot instances). 
+
+Note that using a multicast IP requires either a switch that supports multicast, or (more likely) running in an AWS VPC configured with a [multicast domain](https://docs.aws.amazon.com/vpc/latest/tgw/tgw-multicast-overview.html).
+
+## Registration and De-registration Packet Formats
+
+The admin packet formats are very simple as of version 2.0. In the simplest single-SLB use case a registration packet from a backend may consist of nothing more than two magic bytes (`0x11` `0x11`). Optionally, the packets can come from a different source (e.g. a management server) and incude four  bytes to specify the ipv4 address of a backend. In either case, two additional optional bytes for traffic "weight" relative to other backends, and for the "group" to assign to the backend may be appended (more about groups below). In ASCII art:
 
 ```
 0x11 0x11 [X X X X] [X] [X]
@@ -60,13 +101,6 @@ The admin packet format is very simple as of version 2.0. A packet from a backen
           four bytes for ip to add
 ```
 
-Weights are used to control the relative amount of traffic delivered to each backend.  If no weight is specified the default value of 100 (configurable with `--default-target-weight`) will be applied to the backend, and each will receive the same volume of packets. That said, it's expected (and advisable) that backends tune the weight value in their admin packets based on their ability to handle traffic (perhaps reduced when CPU is high, updates are being applied, etc.). For example:
-
-- If three backends are known to an SLB with weights of `100`, `50` and `50`, respectively, then the first will receive 50% of the traffic and the second and third will each get 25%.
-- If two backends are known to an SLB with weights of `31` and `31`, respectively, then each will receive 50% of the traffic.
-
-It's important to send admin packets reliably and at a sufficient cadence.  Each time an packet is received by SLB the backend's "last seen" time is updated. If 30 seconds (configurable with `--target-timeout`) passes without a backend being seen, it is removed and no further traffic will be sent to it. 
-
 To immeadiately remove a target send a packet with `0x86` as the first byte instead of `0x11` (if sent from a management server, append the IP of the backend to remove):
 
 ```
@@ -76,11 +110,24 @@ To immeadiately remove a target send a packet with `0x86` as the first byte inst
           four bytes for ip to remove
 ```
 
+## Backend Weights
+
+Weights are used to control the relative amount of traffic delivered to each backend.  If no weight is specified the default value of 100 (configurable with `--default-target-weight`) will be applied to the backend, and each will receive the same volume of packets. That said, it's expected (and advisable) that backends tune the weight value in their admin packets based on their ability to handle traffic (perhaps reduced when CPU is high, updates are being applied, etc.). For example:
+
+- If three backends are known to an SLB with weights of `100`, `50` and `50`, respectively, then the first will receive 50% of the traffic and the second and third will each get 25%.
+- If two backends are known to an SLB with weights of `31` and `31`, respectively, then each will receive 50% of the traffic.
+
+When using groups, the relative weights are evaluated versus other backends in the same group (not accross all groups).
+
+> It's important to send admin packets reliably and at a sufficient cadence.  Each time an packet is received by SLB the backend's "last seen" time is updated. If 30 seconds (configurable with `--target-timeout`) passes without a backend being seen, it is removed and no further traffic will be sent to it. 
+
 ## Backend Groups ##
 
-By defaults, all backends will be used to service all ports served by the load balancer. However, it's possible to assign individual ports to subsets of backends using port assignment message and providing group IDs in registration messages.  Consider, for example, that you would like to have SLB load balance traffic for ports 1812-1813 but assign the traffic reaching each port to a different set of servers. To do so:
+By default, all backends will be used to service all ports served by the load balancer. 
 
-- Send port assignment messages (magic bytes `\x66 \x11`) with a port number (two bytes) and a group ID (one byte). These messages need not be repeated, and can be sent only when a change to port group assignments is desired (there is no harm in repeating them, however, which can be convenient to ensure the ports are correctly assigned groups after service restarts). 
+However, it's possible to assign individual ports to subsets of backends using SLB port assignment messages and providing group IDs in registration messages.  Consider, for example, that you would like to have SLB load balance traffic for ports 1812-1813 but assign the traffic reaching each port to a different set of servers. To do so:
+
+- Send port assignment messages (magic bytes `\x66 \x11`) with a port number (two bytes) and a group ID (one byte). These messages need not be repeated, and can be sent when a change to port group assignments is desired (there is no harm in repeating them, however, which can be convenient to ensure the ports are correctly assigned groups after service restarts). 
 - Add the appropriate group ID to registration messages for the two sets of backends.
 
 ```
@@ -91,7 +138,6 @@ By defaults, all backends will be used to service all ports served by the load b
           |
         two bytes for port number, litten endian 
 ```
-
 
 ## Sending Admin Packets with Bash ## 
 
