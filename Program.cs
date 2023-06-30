@@ -64,15 +64,15 @@ namespace SimplestLoadBalancer
     /// <summary>
     /// Sessionless UDP Load Balancer sends packets to targets without session affinity.
     /// </summary>
-    /// <param name="serverPortRange">Set the ports to listen to and forward to backend targets (default "1812-1813")</param>
+    /// <param name="serverPortRange">Set the ports to listen to and forward to backend targets</param>
     /// <param name="adminIp">Set the IP to listen on for watchdog events (default is first private IP)</param>
-    /// <param name="adminPort">Set the port that targets will send watchdog events (default 1111)</param>
-    /// <param name="clientTimeout">Seconds to allow before cleaning-up idle clients (default 30)</param>
-    /// <param name="targetTimeout">Seconds to allow before removing target missing watchdog events (default 30)</param>
-    /// <param name="defaultTargetWeight">Weight to apply to targets when not specified (default 100)</param>
-    /// <param name="unwise">Allows public IP addresses for targets (default is to only allow private IPs)</param>
-    /// <param name="statsPeriodMs">Sets the number of milliseconds between statistics messages printed to the console (default 500, disable 0, max 65535)</param>
-    /// <param name="defaultGroupId">Sets the group ID to assign to backends that when a registration packet doesn't include one, and when port isn't assigned a group (default 0)</param>
+    /// <param name="adminPort">Set the port that targets will send watchdog events</param>
+    /// <param name="clientTimeout">Seconds to allow before cleaning-up idle clients</param>
+    /// <param name="targetTimeout">Seconds to allow before removing target missing watchdog events</param>
+    /// <param name="defaultTargetWeight">Weight to apply to targets when not specified</param>
+    /// <param name="unwise">Allows public IP addresses for targets</param>
+    /// <param name="statsPeriodMs">Sets the number of milliseconds between statistics messages printed to the console (disable: 0, max: 65535)</param>
+    /// <param name="defaultGroupId">Sets the group ID to assign to backends that when a registration packet doesn't include one, and when port isn't assigned a group</param>
     static async Task Main(string serverPortRange = "1812-1813", IPAddress adminIp = default, int adminPort = 1111, uint clientTimeout = 30, uint targetTimeout = 30, byte defaultTargetWeight = 100, bool unwise = false, ushort statsPeriodMs = 1000, byte defaultGroupId = 0)
     {
       var ports = serverPortRange.Split("-", StringSplitOptions.RemoveEmptyEntries) switch

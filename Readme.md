@@ -16,7 +16,7 @@ For simple, stateless UDP protocols there is no advantage in trying to maintain 
 
 ## Running SLB ##
 
-By default SLB will listen on ports `1812` and `1813` incomming UDP packets and will relay them one to one of the backend targets it knows. The ports it listens on can with the `--server-port-range` option, which accepts a single port (e.g. `541`) or a range of ports (e.g. `4000-5000`).
+By default SLB will listen on ports `1812` and `1813` for incomming UDP packets and relay them to random backend targets it knows. The ports it listens on can with the `--server-port-range` option, which accepts a single port (e.g. `541`) or a range of ports (e.g. `4000-5000`).
 
 To make SLB aware of backends requires sending "watchdog" (aka. "keep alive") packets to the admin port (more on this below). By default the admin port is `1111`, but it can be configured using the `--admin-port` option.  If multiple network cards are present in your system, you can specify the IP using the `--admin-ip` option.  If the IP specified with `--admin-ip` is in the multicast CIDR range (`244.0.0.0/4`) SLB will automatically join that multicast group (more on this below).
 
@@ -30,19 +30,25 @@ Usage:
   SimplestLoadBalancer [options]
 
 Options:
-  --server-port-range <server-port-range>            Set the port to listen to and forward to backend targets (default "1812-1813")
-  --admin-port <admin-port>                          Set the port that targets will send watchdog events (default 1111)
-  --client-timeout <client-timeout>                  Seconds to allow before cleaning-up idle clients (default 30)
-  --target-timeout <target-timeout>                  Seconds to allow before removing target missing watchdog events (default 30)
-  --default-target-weight <default-target-weight>    Weight to apply to targets when not specified (default 100)
-  --unwise                                           Allows public IP addresses for targets (default is to only allow private IPs)
-  --version                                          Show version information
-  -?, -h, --help                                     Show help and usage information
+  --server-port-range <server-port-range>          Set the ports to listen to and forward to backend targets
+                                                   (default "1812-1813") [default: 1812-1813]
+  --admin-ip <admin-ip>                            Set the IP to listen on for watchdog events [default is first private IP]
+  --admin-port <admin-port>                        Set the port that targets will send watchdog events [default: 1111]
+  --client-timeout <client-timeout>                Seconds to allow before cleaning-up idle clients [default: 30]
+  --target-timeout <target-timeout>                Seconds to allow before removing target missing watchdog events [default: 30]
+  --default-target-weight <default-target-weight>  Weight to apply to targets when not specified [default: 100]
+  --unwise                                         Allows public IP addresses for targets [default: False]
+  --stats-period-ms <stats-period-ms>              Sets the number of milliseconds between statistics messages printed to the 
+                                                   console (disable: 0, max: 65535) [default: 1000]
+  --default-group-id <default-group-id>            Sets the group ID to assign to backends that when a registration packet doesn't
+                                                   include one, and when port isn't assigned a group [default: 0]
+  --version                                        Show version information
+  -?, -h, --help                                   Show help and usage information
 ```
 
 ## Making SLB Aware of Backends ##
 
-Backends aren't setup at the command line. Rather, they are dynamically registered and de-registered using periodic UDP packets sent to the admin port (`--admin-port`). The content of those packets may differ based on how you use SLB in your environment.
+Backends aren't configured at the command line. Rather, they are dynamically registered and de-registered using periodic UDP packets sent to the admin port (`--admin-port`). The content of those packets may differ based on how you use SLB in your environment.
 
 ### Single SLB ### 
 
