@@ -19,7 +19,7 @@ jobs:
       with:
         dotnet-version: 7.0.x
     - name: Publish for Linux
-      run: dotnet publish -o ./SimplestLoadBalancer-${{ github.run_id }}-linux-x64 -c Release -r linux-x64 /p:PublishSingleFile=true /p:PublishTrimmed=true --self-contained
+      run: dotnet publish -o ./SimplestLoadBalancer-${{ github.run_id }}-linux-x64 -c Release -r linux-x64 /p:PublishSingleFile=true --self-contained
     - name: Archive Zip
       uses: actions/upload-artifact@v1
       with:
