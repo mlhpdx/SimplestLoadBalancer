@@ -205,4 +205,8 @@ Or, if you've built a native executable:
 $ ./SimplestLoadBalancer
 ```
 
+## Reporting Issues ##
+
+Please feel free to [create issues](https://github.com/mlhpdx/SimplestLoadBalancer/issues) here on GitHub for questions and bug reports. There is no template provided, or requirements but please try to be as descriptive as possible - it will help ensure we are able to respond in a sensible way. See also, [contributing]().
+
 Enjoy!
