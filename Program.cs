@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Net;
 using System.Net.NetworkInformation;
@@ -29,7 +30,7 @@ namespace SimplestLoadBalancer
       .Where(i => i.NetworkInterfaceType != NetworkInterfaceType.Loopback)
       .SelectMany(i => i.GetIPProperties().UnicastAddresses)
       .Where(a => a.Address.AddressFamily == AddressFamily.InterNetwork)
-      .Where(a => IPNetwork.IsIANAReserved(a.Address))
+      .Where(a => IPNetwork2.IsIANAReserved(a.Address))
       .Select(a => a.Address);
 
     public const int SIO_UDP_CONNRESET = -1744830452;
@@ -220,7 +221,7 @@ namespace SimplestLoadBalancer
                 case [0x11, 0x11, .. var command]:
                   {
                     (var ip, var weight, var group_id) = get_ip_weight_and_group(command);
-                    if (unwise || IPNetwork.IsIANAReserved(ip))
+                    if (unwise || IPNetwork2.IsIANAReserved(ip))
                     {
                       var group = backend_groups.AddOrUpdate(group_id, id => new(), (id, g) => g);
                       if (group != null)
