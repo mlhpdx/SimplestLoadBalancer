@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.CommandLine;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Net;
@@ -15,7 +16,7 @@ namespace SimplestLoadBalancer
   {
     public static IEnumerable<int> Enumerate(this (int from, int to) range) => Enumerable.Range(range.from, range.to - range.from + 1);
 
-    static readonly Random rand = new Random();
+    static readonly Random rand = new();
     public static K Random<K, V>(this IDictionary<K, (byte weight, V)> items)
     {
       var n = rand.Next(0, items.Values.Sum(v => v.weight));
@@ -78,9 +79,9 @@ namespace SimplestLoadBalancer
     {
       var ports = serverPortRange.Split("-", StringSplitOptions.RemoveEmptyEntries) switch
       {
-        string[] a when a.Length == 1 => new[] { int.Parse(a[0]) },
+        string[] a when a.Length == 1 => [int.Parse(a[0])],
         string[] a when a.Length == 2 => (from: int.Parse(a[0]), to: int.Parse(a[1])).Enumerate().ToArray(),
-        _ => throw new Exception($"Invalid server port range: {serverPortRange}.")
+        _ => throw new ArgumentException($"Invalid server port range: {serverPortRange}.", nameof(serverPortRange))
       };
 
       await Console.Out.WriteLineAsync($"{DateTime.UtcNow:s}: Welcome to the simplest UDP Load Balancer.  Hit Ctrl-C to Stop.");
@@ -133,8 +134,8 @@ namespace SimplestLoadBalancer
       async IAsyncEnumerable<(UdpReceiveResult result, int port)> requests()
       {
           foreach (var s in servers)
-              if (s.Value.Available > 0)
-                  yield return (await s.Value.ReceiveAsync(), s.Key);
+            if (s.Value.Available > 0)
+              yield return (await s.Value.ReceiveAsync(), s.Key);
       }
 
       // task to listen on the server port and relay packets to random backends via a client-specific internal port
@@ -149,7 +150,7 @@ namespace SimplestLoadBalancer
           if (backend_groups.TryGetValue(port_group_map[port], out var group))
           {
             var backend = group.Random();
-            new IPEndPoint(backend, port)?.SendVia(client.internal_client, request.Buffer, s => Interlocked.Increment(ref relayed));
+            new IPEndPoint(backend, port).SendVia(client.internal_client, request.Buffer, s => Interlocked.Increment(ref relayed));
           }
           any = true;
         }
@@ -297,7 +298,7 @@ namespace SimplestLoadBalancer
 
       await Task.WhenAll(tasks);
       var e = string.Join(", ", tasks.Where(t => t.Exception != null).Select(t => t.Exception.Message));
-      await Console.Out.WriteLineAsync($"{DateTime.UtcNow:s}: Bye-now ({(e.Any() ? e : "OK")}).");
+      await Console.Out.WriteLineAsync($"{DateTime.UtcNow:s}: Bye-now ({(e.Length != 0 ? e : "OK")}).");
     }
   }
 }
