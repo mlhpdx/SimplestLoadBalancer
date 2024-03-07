@@ -89,7 +89,7 @@ Again, the weight and group ID bytes may optionally be appended.
 
 ### SLB in a High Availability Environment
  
-When a more robust HA deployment with multiple SLBs is needed the communication between backends and SLB can be simplied by using a multicast group IP. This is helpful since each SLB must be aware of each backend. In such a case the SLB servers should make use the `--admin-ip` option to specify a multicast address which will cause the SLBs to join the multicast group and hence all receive any message sent to that IP. The backends can be configured with that single IP, minimizing their workload and simplifying their configuration (particularly when SLBs are rotated in and out of service due to autoscaling and/or the use of spot instances). 
+When a more robust HA deployment with multiple SLBs is needed the communication between backends and SLB can be simplified by using a multicast group IP. This is helpful since each SLB must be aware of each backend. In such a case the SLB servers should make use the `--admin-ip` option to specify a multicast address which will cause the SLBs to join the multicast group and hence all receive any message sent to that IP. The backends can be configured with that single IP, minimizing their workload and simplifying their configuration (particularly when SLBs are rotated in and out of service due to autoscaling and/or the use of spot instances). 
 
 Note that using a multicast IP requires either a switch that supports multicast, or (more likely) running in an AWS VPC configured with a [multicast domain](https://docs.aws.amazon.com/vpc/latest/tgw/tgw-multicast-overview.html).
 
@@ -174,7 +174,7 @@ $ watch -n10 ./lb.sh
 
 ## Building ##
 
-This is a very simple .Net 7.0 project, so to build it run (assuming you have dotnet-sdk-7.0 installed):
+Pre-built binaries for Linux and Windows x64, and Linux ARM are available as GitHub "Releases". This is a very simple .Net 8.0 project, so to build it run (assuming you have dotnet-sdk-8.0 installed):
 
 ```
 dotnet build
