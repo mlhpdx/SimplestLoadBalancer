@@ -154,15 +154,20 @@ namespace SimplestLoadBalancer
           }
           any = true;
         }
-        if (any) await Task.Delay(10); // slack the loop
+        if (!any) await Task.Delay(10); // slack the loop
       }
 
       // helper to get replies asyncronously
       async IAsyncEnumerable<(UdpReceiveResult result, IPEndPoint ep, int port)> replies()
       {
-        foreach (var c in clients)
-          if (c.Value.internal_client.Available > 0)
+        var any = false;
+        foreach (var c in clients) {
+          if (c.Value.internal_client.Available > 0) {
             yield return (await c.Value.internal_client.ReceiveAsync(), c.Key.remote, c.Key.external_port);
+            any = true;
+          }
+        }
+        if (!any) await Task.Delay(10); // slack the loop
       }
 
       // task to listen for responses from backends and re-send them to the correct external client
