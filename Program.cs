@@ -293,7 +293,7 @@ namespace SimplestLoadBalancer
               {// see AIEE No. 26
                 (var ip, var _, var group_id) = get_ip_weight_and_group(command);
                 if (backend_groups.TryGetValue(group_id, out var group))
-                  group.Remove(ip, out var seen);
+                  group.Remove(ip, out var _);
                 await Console.Out.WriteLineAsync($"{DateTime.UtcNow:s}: Remove {ip} from group {group_id}.");
               }
               break;
