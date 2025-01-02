@@ -1,8 +1,6 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.CommandLine;
-using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Net;
 using System.Net.NetworkInformation;
@@ -30,7 +28,7 @@ namespace SimplestLoadBalancer
     interfaces.Where(i => i.OperationalStatus == OperationalStatus.Up)
       .Where(i => i.NetworkInterfaceType != NetworkInterfaceType.Loopback)
       .SelectMany(i => i.GetIPProperties().UnicastAddresses)
-      .Where(a => a.Address.AddressFamily == AddressFamily.InterNetwork)
+      .Where(a => a.Address.AddressFamily == AddressFamily.InterNetwork || a.Address.AddressFamily == AddressFamily.InterNetworkV6)
       .Where(a => IPNetwork2.IsIANAReserved(a.Address))
       .Select(a => a.Address);
 
@@ -75,7 +73,8 @@ namespace SimplestLoadBalancer
     /// <param name="unwise">Allows public IP addresses for targets</param>
     /// <param name="statsPeriodMs">Sets the number of milliseconds between statistics messages printed to the console (disable: 0, max: 65535)</param>
     /// <param name="defaultGroupId">Sets the group ID to assign to backends that when a registration packet doesn't include one, and when port isn't assigned a group</param>
-    static async Task Main(string serverPortRange = "1812-1813", IPAddress adminIp = default, int adminPort = 1111, uint clientTimeout = 30, uint targetTimeout = 30, byte defaultTargetWeight = 100, bool unwise = false, ushort statsPeriodMs = 1000, byte defaultGroupId = 0)
+    /// <param name="useProxyProtocol">When specified packet data will be prepended with a Proxy Protocol v2 header when sent to the backend</param>
+    static async Task Main(string serverPortRange = "1812-1813", IPAddress adminIp = default, int adminPort = 1111, uint clientTimeout = 30, uint targetTimeout = 30, byte defaultTargetWeight = 100, bool unwise = false, ushort statsPeriodMs = 1000, byte defaultGroupId = 0, bool useProxyProtocol = false)
     {
       var ports = serverPortRange.Split("-", StringSplitOptions.RemoveEmptyEntries) switch
       {
@@ -86,12 +85,14 @@ namespace SimplestLoadBalancer
 
       await Console.Out.WriteLineAsync($"{DateTime.UtcNow:s}: Welcome to the simplest UDP Load Balancer.  Hit Ctrl-C to Stop.");
 
-      var admin_ip = adminIp ?? NetworkInterface.GetAllNetworkInterfaces().Private().First();
+      var my_ip = NetworkInterface.GetAllNetworkInterfaces().Private().First();
+      var admin_ip = adminIp ?? my_ip;
       await Console.Out.WriteLineAsync($"{DateTime.UtcNow:s}: The server port range is {serverPortRange} ({ports.Length} port{(ports.Length > 1 ? "s" : "")}).");
       await Console.Out.WriteLineAsync($"{DateTime.UtcNow:s}: The watchdog endpoint is {admin_ip}:{adminPort}.");
       await Console.Out.WriteLineAsync($"{DateTime.UtcNow:s}: Timeouts are: {clientTimeout}s for clients, and {targetTimeout}s  for targets.");
+      await Console.Out.WriteLineAsync($"{DateTime.UtcNow:s}: Proxy Protocol v2 for targets is {(useProxyProtocol ? "enabled" : "disabled")}.");
       await Console.Out.WriteLineAsync($"{DateTime.UtcNow:s}: {(unwise ? "*WARNING* " : string.Empty)}"
-      + $"Targets with public IPs {(unwise ? "WILL BE" : "will NOT be")} allowed.");
+        + $"Targets with public IPs {(unwise ? "WILL BE" : "will NOT be")} allowed.");
 
       using var cts = new CancellationTokenSource();
 
@@ -133,10 +134,39 @@ namespace SimplestLoadBalancer
       // helper to get requests (inbound packets from external sources) asyncronously
       async IAsyncEnumerable<(UdpReceiveResult result, int port)> requests()
       {
-          foreach (var s in servers)
-            if (s.Value.Available > 0)
-              yield return (await s.Value.ReceiveAsync(), s.Key);
+        foreach (var s in servers)
+          if (s.Value.Available > 0)
+            yield return (await s.Value.ReceiveAsync(), s.Key);
       }
+
+      Memory<byte> ppv2_header(IPEndPoint src, int dst_port)
+      {
+        return src.Address.AddressFamily switch {
+          AddressFamily.InterNetwork or AddressFamily.InterNetworkV6 => (byte[])[
+            0x0D, 0x0A, 0x0D, 0x0A, 0x00, 0x0D, 0x0A, 0x51, 0x55, 0x49, 0x54, 0x0A, // signature
+            0x21, // version 2, proxied
+#pragma warning disable CS8509 // The outer switch expression ensures the innner expression may see only the two possible states
+            .. src.Address.AddressFamily switch {
+              AddressFamily.InterNetwork => (byte[])[
+                0x12, // IP(v4) UDP
+                0x00, 0x0C, // 12 bytes of address
+                .. src.Address.GetAddressBytes(),
+                .. (my_ip.AddressFamily == AddressFamily.InterNetwork ? my_ip : IPAddress.None).GetAddressBytes()
+              ],
+              AddressFamily.InterNetworkV6 => [
+                0x22, // IP(v6) UDP
+                0x00, 0x20, // 32 bytes of address
+                .. src.Address.GetAddressBytes(),
+                .. (my_ip.AddressFamily == AddressFamily.InterNetworkV6 ? my_ip : IPAddress.IPv6None).GetAddressBytes()
+              ]
+            },
+#pragma warning restore CS8509 // 
+            (byte)(src.Port / 256), (byte)(src.Port % 256),
+            (byte)(dst_port / 256), (byte)(dst_port % 256)
+          ],
+          _ => Memory<byte>.Empty
+        };
+            }
 
       // task to listen on the server port and relay packets to random backends via a client-specific internal port
       async Task relay()
@@ -146,11 +176,12 @@ namespace SimplestLoadBalancer
         {
           Interlocked.Increment(ref received);
 
-          var client = clients.AddOrUpdate((request.RemoteEndPoint, port), ep => (new UdpClient().Configure(), DateTime.UtcNow), (ep, c) => (c.internal_client, DateTime.UtcNow));
+          var (internal_client, _) = clients.AddOrUpdate((request.RemoteEndPoint, port), ep => (new UdpClient().Configure(), DateTime.UtcNow), (ep, c) => (c.internal_client, DateTime.UtcNow));
           if (backend_groups.TryGetValue(port_group_map[port], out var group))
           {
             var backend = group.Random();
-            new IPEndPoint(backend, port).SendVia(client.internal_client, request.Buffer, s => Interlocked.Increment(ref relayed));
+            var header = useProxyProtocol ? ppv2_header(request.RemoteEndPoint, port) : Memory<byte>.Empty;
+            new IPEndPoint(backend, port).SendVia(internal_client, [ ..header.Span, ..request.Buffer ], s => Interlocked.Increment(ref relayed));
           }
           any = true;
         }
@@ -161,8 +192,10 @@ namespace SimplestLoadBalancer
       async IAsyncEnumerable<(UdpReceiveResult result, IPEndPoint ep, int port)> replies()
       {
         var any = false;
-        foreach (var c in clients) {
-          if (c.Value.internal_client.Available > 0) {
+        foreach (var c in clients)
+        {
+          if (c.Value.internal_client.Available > 0)
+          {
             yield return (await c.Value.internal_client.ReceiveAsync(), c.Key.remote, c.Key.external_port);
             any = true;
           }
@@ -186,80 +219,91 @@ namespace SimplestLoadBalancer
       using var control = new IPEndPoint(admin_ip, adminPort).MakeUdpClient();
       async Task admin()
       {
-          if (control.Available > 0)
+        if (control.Available > 0)
+        {
+          var packet = await control.ReceiveAsync();
+          var payload = new ArraySegment<byte>(packet.Buffer);
+
+          (IPAddress ip, byte weight, byte group_id) get_ip_weight_and_group(ArraySegment<byte> command) =>
+            command switch
+            {
+              // eight bytes for ip, then options
+              [_, _, _, _, _, _, _, _, .. var options] =>
+                (
+                  ip: command switch
+                  {
+                  [0, 0, 0, 0, 0, 0, 0, 0, ..] => packet.RemoteEndPoint.Address,
+                    _ => new IPAddress(command.Slice(0, 8))
+                  },
+                  weight: options switch { [var weight, ..] => weight, _ => defaultTargetWeight },
+                  group_id: options switch { [_, var group, ..] => group, _ => defaultGroupId }
+                ),
+              // four bytes for ip, then options
+              [_, _, _, _, .. var options] =>
+                (
+                  ip: command switch
+                  {
+                  [0, 0, 0, 0, ..] => packet.RemoteEndPoint.Address,
+                    _ => new IPAddress(command.Slice(0, 4))
+                  },
+                  weight: options switch { [var weight, ..] => weight, _ => defaultTargetWeight },
+                  group_id: options switch { [_, var group, ..] => group, _ => defaultGroupId }
+                ),
+              // less than four bytes, just options
+              [.. var options] =>
+                (
+                  ip: packet.RemoteEndPoint.Address,
+                  weight: options switch { [var weight, ..] => weight, _ => defaultTargetWeight },
+                  group_id: options switch { [_, var group, ..] => group, _ => defaultGroupId }
+                )
+            };
+
+          switch (payload)
           {
-            var packet = await control.ReceiveAsync();
-            var payload = new ArraySegment<byte>(packet.Buffer);
-
-            (IPAddress ip, byte weight, byte group_id) get_ip_weight_and_group(ArraySegment<byte> command) =>
-              command switch
+            case [0x66, 0x11, var port_low, var port_high, var group]:
               {
-                // four bytes for ip, then options
-                [_, _, _, _, .. var options] => 
-                  (
-                    ip: command switch
-                      {
-                        [0, 0, 0, 0, ..] => packet.RemoteEndPoint.Address,
-                        _ => new IPAddress(command.Slice(0, 4))
-                      },
-                    weight: options switch { [var weight, ..] => weight, _ => defaultTargetWeight },
-                    group_id: options switch { [_, var group, ..] => group, _ => defaultGroupId }
-                  ),
-                // less than four bytes, just options
-                [.. var options] => 
-                  ( 
-                    ip: packet.RemoteEndPoint.Address,
-                    weight: options switch { [var weight, ..] => weight, _ => defaultTargetWeight },
-                    group_id: options switch { [_, var group, ..] => group, _ => defaultGroupId }
-                  )
-              };
-
-              switch (payload)
-              {
-                case [0x66, 0x11, var port_low, var port_high, var group]:
-                  {
-                    var port = port_low + (port_high << 8);
-                    port_group_map.AddOrUpdate(port, p => group, (p, g) => group);
-                    await Console.Out.WriteLineAsync($"{DateTime.UtcNow:s}: Mapped port {port} to group {group}.");
-                  }
-                  break;
-
-                case [0x11, 0x11, .. var command]:
-                  {
-                    (var ip, var weight, var group_id) = get_ip_weight_and_group(command);
-                    if (unwise || IPNetwork2.IsIANAReserved(ip))
-                    {
-                      var group = backend_groups.AddOrUpdate(group_id, id => new(), (id, g) => g);
-                      if (group != null)
-                      {
-                        if (weight > 0)
-                        {
-                          group.AddOrUpdate(ip, i => (weight, DateTime.UtcNow), (i, d) => (weight, DateTime.UtcNow));
-                          await Console.Out.WriteLineAsync($"{DateTime.UtcNow:s}: Refresh {ip} (weight {weight}, group {group_id}).");
-                        }
-                        else await Console.Out.WriteLineAsync($"{DateTime.UtcNow}: Rejected zero-weighted {ip} for group {group_id}.");
-                      }
-                      else await Console.Out.WriteLineAsync($"${DateTime.UtcNow:s}: Rejected invalid backend group {group_id} for ip {ip}.");
-                    }
-                    else await Console.Out.WriteLineAsync($"{DateTime.UtcNow:s}: Rejected {ip}.");
-                  }
-                  break;
-
-                case [0x86, 0x11, .. var command]:
-                  {// see AIEE No. 26
-                    (var ip, var _, var group_id) = get_ip_weight_and_group(command);
-                    if (backend_groups.TryGetValue(group_id, out var group))
-                      group.Remove(ip, out var seen);
-                    await Console.Out.WriteLineAsync($"{DateTime.UtcNow:s}: Remove {ip} from group {group_id}.");
-                  }
-                  break;
-
-                default:
-                await Console.Out.WriteLineAsync($"{DateTime.UtcNow:s}: Ignored bad/unrecognized control packet from {packet.RemoteEndPoint}.");
-                  break;
+                var port = port_low + (port_high << 8);
+                port_group_map.AddOrUpdate(port, p => group, (p, g) => group);
+                await Console.Out.WriteLineAsync($"{DateTime.UtcNow:s}: Mapped port {port} to group {group}.");
               }
+              break;
+
+            case [0x11, 0x11, .. var command]:
+              {
+                (var ip, var weight, var group_id) = get_ip_weight_and_group(command);
+                if (unwise || IPNetwork2.IsIANAReserved(ip))
+                {
+                  var group = backend_groups.AddOrUpdate(group_id, id => new(), (id, g) => g);
+                  if (group != null)
+                  {
+                    if (weight > 0)
+                    {
+                      group.AddOrUpdate(ip, i => (weight, DateTime.UtcNow), (i, d) => (weight, DateTime.UtcNow));
+                      await Console.Out.WriteLineAsync($"{DateTime.UtcNow:s}: Refresh {ip} (weight {weight}, group {group_id}).");
+                    }
+                    else await Console.Out.WriteLineAsync($"{DateTime.UtcNow}: Rejected zero-weighted {ip} for group {group_id}.");
+                  }
+                  else await Console.Out.WriteLineAsync($"${DateTime.UtcNow:s}: Rejected invalid backend group {group_id} for ip {ip}.");
+                }
+                else await Console.Out.WriteLineAsync($"{DateTime.UtcNow:s}: Rejected {ip}.");
+              }
+              break;
+
+            case [0x86, 0x11, .. var command]:
+              {// see AIEE No. 26
+                (var ip, var _, var group_id) = get_ip_weight_and_group(command);
+                if (backend_groups.TryGetValue(group_id, out var group))
+                  group.Remove(ip, out var _);
+                await Console.Out.WriteLineAsync($"{DateTime.UtcNow:s}: Remove {ip} from group {group_id}.");
+              }
+              break;
+
+            default:
+              await Console.Out.WriteLineAsync($"{DateTime.UtcNow:s}: Ignored bad/unrecognized control packet from {packet.RemoteEndPoint}.");
+              break;
           }
-          else await Task.Delay(10);
+        }
+        else await Task.Delay(10);
       }
 
       // task to remove backends and clients we haven't heard from in a while

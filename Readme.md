@@ -21,6 +21,8 @@ By default SLB will listen on ports `1812` and `1813` for incomming UDP packets 
 
 To make SLB aware of backends requires sending "watchdog" (aka. "keep alive") packets to the admin port (more on this below). By default the admin port is `1111`, but it can be configured using the `--admin-port` option.  If multiple network cards are present in your system, you can specify the IP using the `--admin-ip` option.  If the IP specified with `--admin-ip` is in the multicast CIDR range (`244.0.0.0/4`) SLB will automatically join that multicast group (more on this below).
 
+SLB will add [Proxy Protocol v2]() headers to each packet when the `--use-proxy-protocol` option is set. The PPv2 header will contain the source IP and port as well as the destination port but the destination IP will always be invalid.
+
 Other options are described in the command help:
 
 ```
@@ -43,6 +45,8 @@ Options:
                                                    console (disable: 0, max: 65535) [default: 1000]
   --default-group-id <default-group-id>            Sets the group ID to assign to backends that when a registration packet doesn't
                                                    include one, and when port isn't assigned a group [default: 0]
+  --use-proxy-protocol                             When specified packet data will be prepended with a Proxy Protocol v2 header 
+                                                   when sent to the backend [default: False]
   --version                                        Show version information
   -?, -h, --help                                   Show help and usage information
 ```
