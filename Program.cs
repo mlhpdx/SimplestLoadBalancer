@@ -28,7 +28,7 @@ namespace SimplestLoadBalancer
     interfaces.Where(i => i.OperationalStatus == OperationalStatus.Up)
       .Where(i => i.NetworkInterfaceType != NetworkInterfaceType.Loopback)
       .SelectMany(i => i.GetIPProperties().UnicastAddresses)
-      .Where(a => a.Address.AddressFamily == AddressFamily.InterNetwork)
+      .Where(a => a.Address.AddressFamily == AddressFamily.InterNetwork || a.Address.AddressFamily == AddressFamily.InterNetworkV6)
       .Where(a => IPNetwork2.IsIANAReserved(a.Address))
       .Select(a => a.Address);
 
@@ -85,12 +85,14 @@ namespace SimplestLoadBalancer
 
       await Console.Out.WriteLineAsync($"{DateTime.UtcNow:s}: Welcome to the simplest UDP Load Balancer.  Hit Ctrl-C to Stop.");
 
-      var admin_ip = adminIp ?? NetworkInterface.GetAllNetworkInterfaces().Private().First();
+      var my_ip = NetworkInterface.GetAllNetworkInterfaces().Private().First();
+      var admin_ip = adminIp ?? my_ip;
       await Console.Out.WriteLineAsync($"{DateTime.UtcNow:s}: The server port range is {serverPortRange} ({ports.Length} port{(ports.Length > 1 ? "s" : "")}).");
       await Console.Out.WriteLineAsync($"{DateTime.UtcNow:s}: The watchdog endpoint is {admin_ip}:{adminPort}.");
       await Console.Out.WriteLineAsync($"{DateTime.UtcNow:s}: Timeouts are: {clientTimeout}s for clients, and {targetTimeout}s  for targets.");
+      await Console.Out.WriteLineAsync($"{DateTime.UtcNow:s}: Proxy Protocol v2 for targets is {(useProxyProtocol ? "enabled" : "disabled")}.");
       await Console.Out.WriteLineAsync($"{DateTime.UtcNow:s}: {(unwise ? "*WARNING* " : string.Empty)}"
-      + $"Targets with public IPs {(unwise ? "WILL BE" : "will NOT be")} allowed.");
+        + $"Targets with public IPs {(unwise ? "WILL BE" : "will NOT be")} allowed.");
 
       using var cts = new CancellationTokenSource();
 
@@ -143,19 +145,19 @@ namespace SimplestLoadBalancer
           AddressFamily.InterNetwork or AddressFamily.InterNetworkV6 => (byte[])[
             0x0D, 0x0A, 0x0D, 0x0A, 0x00, 0x0D, 0x0A, 0x51, 0x55, 0x49, 0x54, 0x0A, // signature
             0x21, // version 2, proxied
-#pragma warning disable CS8509 // The outer switch expressions ensures the innner expression may see only the two possible states
+#pragma warning disable CS8509 // The outer switch expression ensures the innner expression may see only the two possible states
             .. src.Address.AddressFamily switch {
               AddressFamily.InterNetwork => (byte[])[
                 0x12, // IP(v4) UDP
                 0x00, 0x0C, // 12 bytes of address
                 .. src.Address.GetAddressBytes(),
-                .. IPAddress.None.GetAddressBytes()
+                .. (my_ip.AddressFamily == AddressFamily.InterNetwork ? my_ip : IPAddress.None).GetAddressBytes()
               ],
               AddressFamily.InterNetworkV6 => [
                 0x22, // IP(v6) UDP
                 0x00, 0x20, // 32 bytes of address
                 .. src.Address.GetAddressBytes(),
-                .. IPAddress.IPv6None.GetAddressBytes()
+                .. (my_ip.AddressFamily == AddressFamily.InterNetworkV6 ? my_ip : IPAddress.IPv6None).GetAddressBytes()
               ]
             },
 #pragma warning restore CS8509 // 
@@ -225,8 +227,19 @@ namespace SimplestLoadBalancer
           (IPAddress ip, byte weight, byte group_id) get_ip_weight_and_group(ArraySegment<byte> command) =>
             command switch
             {
-            // four bytes for ip, then options
-            [_, _, _, _, .. var options] =>
+              // eight bytes for ip, then options
+              [_, _, _, _, _, _, _, _, .. var options] =>
+                (
+                  ip: command switch
+                  {
+                  [0, 0, 0, 0, 0, 0, 0, 0, ..] => packet.RemoteEndPoint.Address,
+                    _ => new IPAddress(command.Slice(0, 8))
+                  },
+                  weight: options switch { [var weight, ..] => weight, _ => defaultTargetWeight },
+                  group_id: options switch { [_, var group, ..] => group, _ => defaultGroupId }
+                ),
+              // four bytes for ip, then options
+              [_, _, _, _, .. var options] =>
                 (
                   ip: command switch
                   {
@@ -236,13 +249,13 @@ namespace SimplestLoadBalancer
                   weight: options switch { [var weight, ..] => weight, _ => defaultTargetWeight },
                   group_id: options switch { [_, var group, ..] => group, _ => defaultGroupId }
                 ),
-                // less than four bytes, just options
-                [.. var options] =>
-                    (
-                      ip: packet.RemoteEndPoint.Address,
-                      weight: options switch { [var weight, ..] => weight, _ => defaultTargetWeight },
-                      group_id: options switch { [_, var group, ..] => group, _ => defaultGroupId }
-                    )
+              // less than four bytes, just options
+              [.. var options] =>
+                (
+                  ip: packet.RemoteEndPoint.Address,
+                  weight: options switch { [var weight, ..] => weight, _ => defaultTargetWeight },
+                  group_id: options switch { [_, var group, ..] => group, _ => defaultGroupId }
+                )
             };
 
           switch (payload)
