@@ -29,7 +29,10 @@ jobs:
     - name: Add msbuild to PATH
       uses: microsoft/setup-msbuild@v2
     - name: Install WiX
-      run: dotnet tool install --global wix
+      run: |
+        dotnet tool install --global wix
+        wix extension add WixToolset.UI.wixext
+        wix extension add WixToolset.Firewall.wixext
     - name: Build WiX on Windows
       run: wix build package.wxs -define PublishDir=./slb-${{ matrix.rid }} -o SimplestLoadBalancer-${{ steps.get_version.outputs.VERSION }}-${{ matrix.rid }}.msi -ext WixToolset.UI.wixext -ext WixToolset.Firewall.wixext
     - name: Upload MSI to Releaase
