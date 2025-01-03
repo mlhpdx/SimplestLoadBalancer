@@ -20,7 +20,7 @@ jobs:
         dotnet-version: 8.0.x
     - name: Get the Tagged Version
       id: get_version
-      run:
+      run: |
         echo "VERSION=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
         echo "RELEASE_ID=$(jq --raw-output '.release.id' $GITHUB_EVENT_PATH)" >> "$GITHUB_OUTPUT"
     - name: Publish for OS
