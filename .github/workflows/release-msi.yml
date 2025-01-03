@@ -1,10 +1,10 @@
 name: Release
 
 on: 
+  workflow_dispatch:
   release: 
     types:
       - created
-      - edited
 
 jobs:
   publish:
