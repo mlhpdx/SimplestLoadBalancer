@@ -36,6 +36,7 @@ jobs:
     - name: Build WiX on Windows
       run: wix build package.wxs -define PublishDir=./slb-${{ matrix.rid }} -o SimplestLoadBalancer-${{ steps.get_version.outputs.VERSION }}-${{ matrix.rid }}.msi -ext WixToolset.UI.wixext -ext WixToolset.Firewall.wixext
     - name: Upload MSI to Releaase
+      shell: bash
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         VERSION: ${{ steps.get_version.outputs.VERSION }}
