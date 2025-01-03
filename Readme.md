@@ -79,14 +79,14 @@ SLB will interpret such a packet as "register the sender as a backend".  Optiona
 In some environments registration packets won't be sent from backends themselves, and SLB supports such use cases. When a registration packet is sent from a "third party" the content will need to include the IP address of the backend being registered:
 
 ```
-0x11 0x11 X X X X [X] [X]
+0x11 0x11 X ... X [X] [X]
           ^        ^   ^
           |        |   |
           |        |  one byte for group id
           |        |
           |       one byte for weight
           |
-          four bytes for ip to add
+          four or eight bytes for ip to add (ipv4 or ipv6 respectively)
 ```
 
 Again, the weight and group ID bytes may optionally be appended.
@@ -99,26 +99,26 @@ Note that using a multicast IP requires either a switch that supports multicast,
 
 ## Registration and De-registration Packet Formats
 
-The admin packet formats are very simple as of version 2.0. In the simplest single-SLB use case a registration packet from a backend may consist of nothing more than two magic bytes (`0x11` `0x11`). Optionally, the packets can come from a different source (e.g. a management server) and incude four  bytes to specify the ipv4 address of a backend. In either case, two additional optional bytes for traffic "weight" relative to other backends, and for the "group" to assign to the backend may be appended (more about groups below). In ASCII art:
+The admin packet formats are very simple as of version 2.0. In the simplest single-SLB use case a registration packet from a backend may consist of nothing more than two magic bytes (`0x11` `0x11`). Optionally, the packets can come from a different source (e.g. a management server) and incude four or eight bytes to specify the ipv4 or ipv6, respectively, address of a backend. In either case, two additional optional bytes for traffic "weight" relative to other backends, and for the "group" to assign to the backend may be appended (more about groups below). In ASCII art:
 
 ```
-0x11 0x11 [X X X X] [X] [X]
+0x11 0x11 [X ... X] [X] [X]
            ^         ^   ^
            |         |   |
            |         |  one byte for group id
            |         |
            |        one byte for weight
            |
-          four bytes for ip to add
+          four or eight bytes for ip to add (ipv4 or ipv6 respectively)
 ```
 
 To immeadiately remove a target send a packet with `0x86` as the first byte instead of `0x11` (if sent from a management server, append the IP of the backend to remove):
 
 ```
-0x86 0x11 [X X X X]
+0x86 0x11 [X ... X]
            ^
            |
-          four bytes for ip to remove
+          four or eight bytes for ip to remove (ipv4 or ipv6 respectively)
 ```
 
 ## Backend Weights
@@ -147,7 +147,7 @@ However, it's possible to assign individual ports to subsets of backends using S
           |   |
           |  one byte for group ID
           |
-         two bytes for port number, litten endian 
+         two bytes for port number, little endian 
 ```
 
 ## Sending Admin Packets with Bash ## 
@@ -189,13 +189,13 @@ You'll probably want to generate a native binary executable, which is convenient
 For Linux:
 
 ```
-dotnet publish -o ./ -c Release -r linux-x64 /p:PublishSingleFile=true /p:PublishTrimmed=true --self-contained
+dotnet publish -o ./ -c Release -r linux-x64 /p:PublishSingleFile=true /p:PublishReadyToRun=true --self-contained
 ```
 
 For Windows:
 
 ```
-dotnet publish -o ./ -c Release -r win10-x64 /p:PublishSingleFile=true /p:PublishTrimmed=true --self-contained
+dotnet publish -o ./ -c Release -r win10-x64 /p:PublishSingleFile=true /p:PublishReadyToRun=true --self-contained
 ```
 
 Likewise, it's simple to run using `dotnet run` in the project directory:
