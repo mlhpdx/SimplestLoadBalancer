@@ -1,0 +1,31 @@
+name: SimplestLoadBalancer
+version: '$VERSION'
+summary: Sessionless UDP Load Balancer
+description: |
+  SLB is a sessionless load balancer for UDP traffic, and solves 
+  problems inherent with using traditional (feature rich) 
+  load balancers for such traffic.
+
+grade: stable # or 'devel' for development versions
+confinement: strict # or 'devmode' for development
+
+base: core22 # Ubuntu 22.04 LTS base
+
+apps:
+  SimplestLoadBalancer:
+    command: bin/SimplestLoadBalancer
+    plugs:
+      - network
+      - home
+
+parts:
+  SimplestLoadBalancer:
+    plugin: dump
+    source: .
+    override-build: |
+      craftctl default
+      mkdir -p $CRAFT_PART_INSTALL/bin/
+      cp $CRAFT_PART_SRC/publish/SimplestLoadBalancer $CRAFT_PART_INSTALL/bin/
+      chmod +x $CRAFT_PART_INSTALL/bin/SimplestLoadBalancer
+    stage-packages:
+      - libc6

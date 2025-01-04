@@ -1,0 +1,35 @@
+name: Release Snap
+
+on: 
+  workflow_dispatch:
+  release: 
+    types:
+      - created
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v1
+      with:
+        dotnet-version: 8.0.x
+    - name: Get the Tagged Version
+      id: get_version
+      shell: bash
+      run: |
+        echo "VERSION=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+        echo "RELEASE_ID=$(jq --raw-output '.release.id' $GITHUB_EVENT_PATH)" >> "$GITHUB_OUTPUT"
+    - name: Publish for Linux x64
+      run: dotnet publish SimplestLoadBalancer.csproj -o ./publish -c Release -r linux-x64 /p:PublishSingleFile=true /p:PublishReadyToRun=true /p:Version=${{ steps.get_version.outputs.VERSION }} --self-contained
+    - uses: snapcore/action-build@v1
+      id: build
+      env:
+        VERSION: ${{ steps.get_version.outputs.VERSION }}
+    - uses: snapcore/action-publish@v1
+      env:
+        SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.STORE_LOGIN }}
+      with:
+        snap: ${{ steps.build.outputs.snap }}
+        release: stable
