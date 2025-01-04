@@ -2,7 +2,7 @@
   <Package
     Name="SimplestLoadBalancer"
     Version="2.2.0"
-    Manufacturer="mlh_pdx"
+    Manufacturer="mlhpdx"
     UpgradeCode="{192fb35c-e77a-4244-ab13-e0f090ad95a1}">
 
     <MajorUpgrade DowngradeErrorMessage="A newer version is already installed." />
@@ -11,8 +11,8 @@
     <!-- UI Configuration -->
     <UI>
       <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
-      <Property Id="ARPCONTACT" Value="https://github.com/mlh_pdx" />
-      <Property Id="ARPURLINFOABOUT" Value="https://github.com/mlh_pdx/SimplestLoadBalancer" />
+      <Property Id="ARPCONTACT" Value="https://github.com/mlhpdx" />
+      <Property Id="ARPURLINFOABOUT" Value="https://github.com/mlhpdx/SimplestLoadBalancer" />
       <Property Id="ARPNOREPAIR" Value="yes" />
     </UI>
 
@@ -61,7 +61,7 @@
         Arguments="/x [ProductCode]" />
       <RemoveFolder Id="ApplicationProgramsFolder" On="uninstall" />
       <RegistryValue Root="HKCU"
-        Key="Software\mlh_pdx\SimplestLoadBalancer"
+        Key="Software\mlhpdx\SimplestLoadBalancer"
         Name="installed"
         Type="integer"
         Value="1"
