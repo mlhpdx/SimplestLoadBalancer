@@ -1,9 +1,9 @@
 name: Release
 
 on: 
-    release: 
-      types:
-        - created
+  release: 
+    types:
+      - created
 
 jobs:
   publish:
@@ -23,10 +23,10 @@ jobs:
     - name: Get the Tagged Version
       id: get_version
       run: | 
-        echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//}
-        echo ::set-output name=RELEASE_ID::$(jq --raw-output '.release.id' $GITHUB_EVENT_PATH)
+        echo "VERSION=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+        echo "RELEASE_ID=$(jq --raw-output '.release.id' $GITHUB_EVENT_PATH)" >> $GITHUB_OUTPUT
     - name: Publish for OS
-      run: dotnet publish -o ./slb-${{ matrix.rid }} -c Release -r ${{ matrix.rid }} /p:PublishSingleFile=true /p:PublishReadyToRun=true /p:Version=${{ steps.get_version.outputs.VERSION }} --self-contained
+      run: dotnet publish SimplestLoadBalancer.csproj -o ./slb-${{ matrix.rid }} -c Release -r ${{ matrix.rid }} /p:PublishSingleFile=true /p:PublishReadyToRun=true /p:Version=${{ steps.get_version.outputs.VERSION }} --self-contained
     - name: Zip it Up
       run: zip -r -j SimplestLoadBalancer-${{ steps.get_version.outputs.VERSION }}-${{ matrix.rid }}.zip ./slb-${{ matrix.rid }} 
     - name: Upload ZIP to Releaase
