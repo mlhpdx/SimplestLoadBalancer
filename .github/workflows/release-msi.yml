@@ -13,7 +13,7 @@ jobs:
       matrix:
         rid: [win-x64]
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
     - name: Setup .NET Core
       uses: actions/setup-dotnet@v1
       with:
@@ -34,7 +34,7 @@ jobs:
         wix extension add WixToolset.UI.wixext
         wix extension add WixToolset.Firewall.wixext
     - name: Build WiX on Windows
-      run: wix build package.wxs -define PublishDir=./slb-${{ matrix.rid }} -o SimplestLoadBalancer-${{ steps.get_version.outputs.VERSION }}-${{ matrix.rid }}.msi -ext WixToolset.UI.wixext -ext WixToolset.Firewall.wixext
+      run: wix build package.wxs -define Version=${{ steps.get_version.outputs.VERSION }} -define PublishDir=./slb-${{ matrix.rid }} -o SimplestLoadBalancer-${{ steps.get_version.outputs.VERSION }}-${{ matrix.rid }}.msi -ext WixToolset.UI.wixext -ext WixToolset.Firewall.wixext
     - name: Upload MSI to Releaase
       shell: bash
       env:

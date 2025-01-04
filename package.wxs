@@ -1,7 +1,7 @@
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
   <Package
     Name="SimplestLoadBalancer"
-    Version="2.2.0"
+    Version="$(var.Version)"
     Manufacturer="mlhpdx"
     UpgradeCode="{192fb35c-e77a-4244-ab13-e0f090ad95a1}">
 
