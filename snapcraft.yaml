@@ -1,5 +1,5 @@
 name: simplest-load-balancer
-version: $VERSION
+adopt-info: version
 summary: Sessionless UDP Load Balancer
 description: |
   SLB is a sessionless load balancer for UDP traffic, and solves 
@@ -21,9 +21,17 @@ apps:
       - home
 
 parts:
+  version:
+    plugin: nil
+    override-pull: |
+      set -x
+      craftctl set version="$(git describe --tags)"
   simplest-load-balancer:
     plugin: dump
     source: .
+    override-pull: |
+      craftctl default
+      craftctl set version=$(git describe --tags --abbrev=10)
     override-build: |
       craftctl default
       mkdir -p $CRAFT_PART_INSTALL/bin/
