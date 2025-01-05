@@ -25,7 +25,8 @@ parts:
     plugin: nil
     override-pull: |
       set -x
-      craftctl set version="$(git describe --tags)"
+      craftctl set version="$(cd $SNAPCRAFT_PROJECT_DIR && git describe --tags)"
+
   simplest-load-balancer:
     plugin: dump
     source: .
