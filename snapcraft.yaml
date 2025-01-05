@@ -7,6 +7,9 @@ description: |
   load balancers for such traffic.
 source-code: https://github.com/mlhpdx/SimplestLoadBalancer
 website: https://github.com/mlhpdx/SimplestLoadBalancer
+license: MIT
+environment:
+  DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1
 
 grade: stable # or 'devel' for development versions
 confinement: strict # or 'devmode' for development
