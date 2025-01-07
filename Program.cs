@@ -74,7 +74,7 @@ namespace SimplestLoadBalancer
     /// <param name="statsPeriodMs">Sets the number of milliseconds between statistics messages printed to the console (disable: 0, max: 65535)</param>
     /// <param name="defaultGroupId">Sets the group ID to assign to backends that when a registration packet doesn't include one, and when port isn't assigned a group</param>
     /// <param name="useProxyProtocol">When specified packet data will be prepended with a Proxy Protocol v2 header when sent to the backend</param>
-    static async Task Main(string serverPortRange = "1812-1813", IPAddress adminIp = default, int adminPort = 1111, uint clientTimeout = 30, uint targetTimeout = 30, byte defaultTargetWeight = 100, bool unwise = false, ushort statsPeriodMs = 1000, byte defaultGroupId = 0, bool useProxyProtocol = false)
+    static async Task Main(string serverPortRange = "1812-1813", IPAddress adminIp = default, int adminPort = 1111, uint clientTimeout = 30, uint targetTimeout = 30, byte defaultTargetWeight = 100, bool unwise = false, ushort statsPeriodMs = 1000, byte defaultGroupId = 0, bool useProxyProtocol = false, string[] proxyProtocolTLV = default)
     {
       var ports = serverPortRange.Split("-", StringSplitOptions.RemoveEmptyEntries) switch
       {
@@ -139,6 +139,18 @@ namespace SimplestLoadBalancer
             yield return (await s.Value.ReceiveAsync(), s.Key);
       }
 
+      byte[] arg_to_tlv(string arg) {
+        (var type, var val) = arg.Split('=', 2, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries) switch {
+          [ [ '0', 'x', .. var t ], string v ] when t?.Length <= 2 => v switch {
+            [ '0', 'x', .. var hex ] => (Convert.FromHexString(t), Convert.FromHexString(hex)),
+            null => (Convert.FromHexString(t), []),
+            _ => (Convert.FromHexString(t), System.Text.Encoding.UTF8.GetBytes(v))
+          },
+          _ => (null, null)
+        };
+        return type == null ? [] : [..type, (byte)(2 + val.Length), ..val];
+      }
+      var tlv_bytes = (proxyProtocolTLV ?? []).SelectMany(arg_to_tlv).ToArray();
       Memory<byte> ppv2_header(IPEndPoint src, int dst_port)
       {
         return src.Address.AddressFamily switch {
@@ -149,13 +161,13 @@ namespace SimplestLoadBalancer
             .. src.Address.AddressFamily switch {
               AddressFamily.InterNetwork => (byte[])[
                 0x12, // IP(v4) UDP
-                0x00, 0x0C, // 12 bytes of address
+                (byte)((12 + tlv_bytes.Length) / 256), (byte)((12 + tlv_bytes.Length) % 256), // 12 bytes of address
                 .. src.Address.GetAddressBytes(),
                 .. (my_ip.AddressFamily == AddressFamily.InterNetwork ? my_ip : IPAddress.None).GetAddressBytes()
               ],
               AddressFamily.InterNetworkV6 => [
                 0x22, // IP(v6) UDP
-                0x00, 0x20, // 32 bytes of address
+                (byte)((32 + tlv_bytes.Length) / 256), (byte)((32 + tlv_bytes.Length) % 256), // 32 bytes of address
                 .. src.Address.GetAddressBytes(),
                 .. (my_ip.AddressFamily == AddressFamily.InterNetworkV6 ? my_ip : IPAddress.IPv6None).GetAddressBytes()
               ]
@@ -166,7 +178,7 @@ namespace SimplestLoadBalancer
           ],
           _ => Memory<byte>.Empty
         };
-            }
+      }
 
       // task to listen on the server port and relay packets to random backends via a client-specific internal port
       async Task relay()
