@@ -4,6 +4,9 @@
 [![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=mlhpdx_SimplestLoadBalancer&metric=security_rating)](https://sonarcloud.io/dashboard?id=mlhpdx_SimplestLoadBalancer)
 [![Lines of Code](https://sonarcloud.io/api/project_badges/measure?project=mlhpdx_SimplestLoadBalancer&metric=ncloc)](https://sonarcloud.io/dashboard?id=mlhpdx_SimplestLoadBalancer)
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/7796/badge)](https://www.bestpractices.dev/projects/7796)
+![mlhpdx.SimplestLoadBalancer](https://img.shields.io/winget/v/mlhpdx.SimplestLoadBalancer)
+[![simplest-load-balancer](https://snapcraft.io/simplest-load-balancer/badge.svg)](https://snapcraft.io/simplest-load-balancer)
+
 
 # Simplest UDP Load Balancer (slb) #
 
@@ -14,6 +17,20 @@ SLB is a sessionless load balancer for UDP traffic, and solves problems inherent
 ## Why? ##
 
 For simple, stateless UDP protocols there is no advantage in trying to maintain "affinity" (aka. "sessions") between clients and back-end instances.  Traditional load balancers assume that affinity is helpful, and so they will try to route packets from a client to a consistent back-end server. By contrast, SLB evenly (randomly) distributes packets one-by-one over all available back-ends. This results in uniform loading of backends, and improved robustness when one backend instance fails (there will be an increase in packet loss for all clients rather than a total loss of traffic for some clients).
+
+## Installing SLB ##
+
+### On Windows ###
+
+```
+winget install mlhpdx.SimplestLoadBalancer
+```
+
+### On Linux ###
+
+```
+snap install simplest-load-balancer
+```
 
 ## Running SLB ##
 

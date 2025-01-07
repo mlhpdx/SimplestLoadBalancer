@@ -348,3 +348,9 @@ MigrationBackup/
 
 # Ionide (cross platform F# VS Code tools) working folder
 .ionide/
+
+# Wix build files
+.wix/
+
+# Winget Manifests (managed in the microsift/winget-pkgs repo)
+manifests/
