@@ -7,13 +7,10 @@ on:
 
 jobs:
   publish:
-
     runs-on: ubuntu-latest
-    
     strategy:
         matrix:
             rid: [win-x64, linux-x64, linux-arm]
-
     steps:
     - uses: actions/checkout@v2
     - name: Setup .NET Core
