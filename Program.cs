@@ -74,7 +74,8 @@ namespace SimplestLoadBalancer
     /// <param name="statsPeriodMs">Sets the number of milliseconds between statistics messages printed to the console (disable: 0, max: 65535)</param>
     /// <param name="defaultGroupId">Sets the group ID to assign to backends that when a registration packet doesn't include one, and when port isn't assigned a group</param>
     /// <param name="useProxyProtocol">When specified packet data will be prepended with a Proxy Protocol v2 header when sent to the backend</param>
-    static async Task Main(string serverPortRange = "1812-1813", IPAddress adminIp = default, int adminPort = 1111, uint clientTimeout = 30, uint targetTimeout = 30, byte defaultTargetWeight = 100, bool unwise = false, ushort statsPeriodMs = 1000, byte defaultGroupId = 0, bool useProxyProtocol = false, string[] proxyProtocolTLV = default)
+    /// <param name="proxyProtocolTLV">Use to specify one or more TLVs to add to PPv2 headers (ignored when PPv2 isn't enabled). Example value: "0xDA=smurf".</param>
+  static async Task Main(string serverPortRange = "1812-1813", IPAddress adminIp = default, int adminPort = 1111, uint clientTimeout = 30, uint targetTimeout = 30, byte defaultTargetWeight = 100, bool unwise = false, ushort statsPeriodMs = 1000, byte defaultGroupId = 0, bool useProxyProtocol = false, string[] proxyProtocolTLV = default)
     {
       var ports = serverPortRange.Split("-", StringSplitOptions.RemoveEmptyEntries) switch
       {
