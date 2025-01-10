@@ -2,8 +2,8 @@ name: simplest-load-balancer
 adopt-info: version
 summary: Sessionless UDP Load Balancer
 description: |
-  SLB is a sessionless load balancer for UDP traffic, and solves 
-  problems inherent with using traditional (feature rich) 
+  SLB is a sessionless load balancer for UDP traffic, and solves
+  problems inherent with using traditional (feature rich)
   load balancers for such traffic.
 source-code: https://github.com/mlhpdx/SimplestLoadBalancer
 website: https://github.com/mlhpdx/SimplestLoadBalancer
@@ -34,8 +34,13 @@ parts:
   simplest-load-balancer:
     plugin: dump
     source: .
+    build-packages:
+      - unzip
+      - wget
     override-build: |
       craftctl default
+      wget -O release.zip $URL_X64
+      unzip release.zip
       mkdir -p $CRAFT_PART_INSTALL/bin/
       cp $CRAFT_PART_SRC/publish/SimplestLoadBalancer $CRAFT_PART_INSTALL/bin/
       chmod +x $CRAFT_PART_INSTALL/bin/SimplestLoadBalancer

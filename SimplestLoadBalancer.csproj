@@ -3,6 +3,9 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net8.0</TargetFramework>
+    <Authors>mlhpdx</Authors>
+    <Product>SimplestLoadBalancer</Product>
+    <Description>Sessionless Load Balancer for UDP</Description>
   </PropertyGroup>
 
   <ItemGroup>
