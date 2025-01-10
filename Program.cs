@@ -144,7 +144,6 @@ namespace SimplestLoadBalancer
         (var type, var val) = arg.Split('=', 2, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries) switch {
           [ [ '0', 'x', .. var t ], string v ] when t?.Length <= 2 => v switch {
             [ '0', 'x', .. var hex ] => (Convert.FromHexString(t), Convert.FromHexString(hex)),
-            null => (Convert.FromHexString(t), []),
             _ => (Convert.FromHexString(t), System.Text.Encoding.UTF8.GetBytes(v))
           },
           _ => (null, null)
