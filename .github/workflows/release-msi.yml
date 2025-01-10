@@ -56,8 +56,8 @@ jobs:
       shell: pwsh
       env: 
         VERSION: ${{ github.ref_name }}
-        URL_X64: https://github.com/dotenvx/dotenvx/releases/download/${{ github.ref_name }}/SimplestLoadBalancer-${{ github.ref_name }}-win-x64.msi
-        URL_ARM64: https://github.com/dotenvx/dotenvx/releases/download/${{ github.ref_name }}/SimplestLoadBalancer-${{ github.ref_name }}-win-arm64.msi
+        URL_X64: https://github.com/mlhpdx/SimplestLoadBalancer/releases/download/${{ github.ref_name }}/SimplestLoadBalancer-${{ github.ref_name }}-win-x64.msi
+        URL_ARM64: https://github.com/mlhpdx/SimplestLoadBalancer/releases/download/${{ github.ref_name }}/SimplestLoadBalancer-${{ github.ref_name }}-win-arm64.msi
       run: |
         iwr https://aka.ms/wingetcreate/latest -OutFile wingetcreate.exe
         ./wingetcreate update mlhpdx.SimplestLoadBalancer -s -v ${{ env.VERSION }} -u ${{ env.URL_X64 }} ${{ env.URL_ARM64 }} -t ${{ secrets.GITHUB_TOKEN }}

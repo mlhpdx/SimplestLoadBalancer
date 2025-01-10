@@ -21,13 +21,14 @@ apps:
     command: bin/SimplestLoadBalancer
     plugs:
       - network
+      - network-bind
       - home
 
 parts:
   version:
     plugin: nil
     override-pull: |
-      set -x
+      set -ex
       craftctl set version="$(cd $SNAPCRAFT_PROJECT_DIR && git describe --tags)"
 
   simplest-load-balancer:
