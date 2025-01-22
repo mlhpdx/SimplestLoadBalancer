@@ -163,13 +163,15 @@ namespace SimplestLoadBalancer
                 0x12, // IP(v4) UDP
                 (byte)((12 + tlv_bytes.Length) / 256), (byte)((12 + tlv_bytes.Length) % 256), // 12 bytes of address
                 .. src.Address.GetAddressBytes(),
-                .. (my_ip.AddressFamily == AddressFamily.InterNetwork ? my_ip : IPAddress.None).GetAddressBytes()
+                .. (my_ip.AddressFamily == AddressFamily.InterNetwork ? my_ip : IPAddress.None).GetAddressBytes(),
+                ..tlv_bytes
               ],
               AddressFamily.InterNetworkV6 => [
                 0x22, // IP(v6) UDP
                 (byte)((32 + tlv_bytes.Length) / 256), (byte)((32 + tlv_bytes.Length) % 256), // 32 bytes of address
                 .. src.Address.GetAddressBytes(),
-                .. (my_ip.AddressFamily == AddressFamily.InterNetworkV6 ? my_ip : IPAddress.IPv6None).GetAddressBytes()
+                .. (my_ip.AddressFamily == AddressFamily.InterNetworkV6 ? my_ip : IPAddress.IPv6None).GetAddressBytes(),
+                ..tlv_bytes
               ]
             },
 #pragma warning restore CS8509 // 
