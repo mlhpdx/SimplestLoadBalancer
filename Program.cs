@@ -148,7 +148,8 @@ namespace SimplestLoadBalancer
           },
           _ => (null, null)
         };
-        return type == null ? [] : [..type, (byte)(2 + val.Length), ..val];
+        var len = 2 + val.Length;
+        return type == null ? [] : [..type, (byte)(len / 256), (byte)(len % 256), ..val];
       }
       var tlv_bytes = (proxyProtocolTLV ?? []).SelectMany(arg_to_tlv).ToArray();
       Memory<byte> ppv2_header(IPEndPoint src, int dst_port)
