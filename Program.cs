@@ -148,7 +148,7 @@ namespace SimplestLoadBalancer
           },
           _ => (null, null)
         };
-        var len = 2 + val.Length;
+        var len = 3 + val.Length;
         return type == null ? [] : [..type, (byte)(len / 256), (byte)(len % 256), ..val];
       }
       var tlv_bytes = (proxyProtocolTLV ?? []).SelectMany(arg_to_tlv).ToArray();
