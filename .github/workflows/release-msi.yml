@@ -49,6 +49,8 @@ jobs:
         echo $AUTH
         curl -sSL -XPOST -H "$AUTH" --upload-file "$FILE" --header "Content-Type:application/octet-stream" --write-out "%{http_code}" --output $(mktemp) "$URL"
   winget:
+    permissions:
+      pull-requests: write
     needs: publish
     runs-on: windows-latest
     steps:
