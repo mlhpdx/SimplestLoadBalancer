@@ -231,6 +231,7 @@ namespace SimplestLoadBalancer
 
       // task to listen for instances asking to add/remove themselves as a target (watch-dog pattern)
       using var control = new IPEndPoint(admin_ip, adminPort).MakeUdpClient();
+      var ep_none = new IPEndPoint(IPAddress.None, 0);
       async Task admin()
       {
         if (control.Available > 0)
@@ -310,6 +311,20 @@ namespace SimplestLoadBalancer
                   group.Remove(ip, out var _);
                 await Console.Out.WriteLineAsync($"{DateTime.UtcNow:s}: Remove {ip} from group {group_id}.");
               }
+              break;
+
+            case [0x2e, 0x11, var port_high, var port_low, .. var ep_bytes]:
+              {
+                var (client_ep, server_port) = (ep_bytes switch {
+                  [ var client_port_high, var client_port_low, .. var ip_bytes ] when ip_bytes.Count == 4 || ip_bytes.Count == 16
+                    => new IPEndPoint(new IPAddress(ep_bytes[2..]), client_port_low + (client_port_high << 8)),
+                  _ => ep_none 
+                }, port_low + (port_high << 8));
+
+                if (clients.TryGetValue((client_ep, server_port), out var info)) {
+                  await control.SendAsync([ 0x2e, 0x12, port_high, port_low, ..ep_bytes ], 0, packet.RemoteEndPoint);
+                }
+              } 
               break;
 
             default:
