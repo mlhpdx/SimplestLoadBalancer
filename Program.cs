@@ -322,7 +322,7 @@ namespace SimplestLoadBalancer
                 }, port_low + (port_high << 8));
 
                 if (clients.TryGetValue((client_ep, server_port), out var info)) {
-                  await control.SendAsync([ 0x2e, 0x12, port_high, port_low, ..ep_bytes ], 0, packet.RemoteEndPoint);
+                  await control.SendAsync([ 0x2e, 0x12, port_high, port_low, ..ep_bytes ], 4 + ep_bytes.Count, packet.RemoteEndPoint);
                 }
               } 
               break;
