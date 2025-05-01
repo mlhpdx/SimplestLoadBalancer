@@ -140,21 +140,25 @@ namespace SimplestLoadBalancer
             yield return (await s.Value.ReceiveAsync(), s.Key);
       }
 
-      byte[] arg_to_tlv(string arg) {
-        (var type, var val) = arg.Split('=', 2, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries) switch {
-          [ [ '0', 'x', .. var t ], string v ] when t?.Length <= 2 => v switch {
-            [ '0', 'x', .. var hex ] => (Convert.FromHexString(t), Convert.FromHexString(hex)),
+      byte[] arg_to_tlv(string arg)
+      {
+        (var type, var val) = arg.Split('=', 2, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries) switch
+        {
+          [['0', 'x', .. var t], string v] when t?.Length <= 2 => v switch
+          {
+            ['0', 'x', .. var hex] => (Convert.FromHexString(t), Convert.FromHexString(hex)),
             _ => (Convert.FromHexString(t), System.Text.Encoding.UTF8.GetBytes(v))
           },
           _ => (null, null)
         };
         var len = 3 + val.Length;
-        return type == null ? [] : [..type, (byte)(len / 256), (byte)(len % 256), ..val];
+        return type == null ? [] : [.. type, (byte)(len / 256), (byte)(len % 256), .. val];
       }
       var tlv_bytes = (proxyProtocolTLV ?? []).SelectMany(arg_to_tlv).ToArray();
       Memory<byte> ppv2_header(IPEndPoint src, int dst_port)
       {
-        return src.Address.AddressFamily switch {
+        return src.Address.AddressFamily switch
+        {
           AddressFamily.InterNetwork or AddressFamily.InterNetworkV6 => (byte[])[
             0x0D, 0x0A, 0x0D, 0x0A, 0x00, 0x0D, 0x0A, 0x51, 0x55, 0x49, 0x54, 0x0A, // signature
             0x21, // version 2, proxied
@@ -195,7 +199,7 @@ namespace SimplestLoadBalancer
           {
             var backend = group.Random();
             var header = useProxyProtocol ? ppv2_header(request.RemoteEndPoint, port) : Memory<byte>.Empty;
-            new IPEndPoint(backend, port).SendVia(internal_client, [ ..header.Span, ..request.Buffer ], s => Interlocked.Increment(ref relayed));
+            new IPEndPoint(backend, port).SendVia(internal_client, [.. header.Span, .. request.Buffer], s => Interlocked.Increment(ref relayed));
           }
           any = true;
         }
@@ -315,8 +319,9 @@ namespace SimplestLoadBalancer
 
             case [0x2e, 0x11, var port_high, var port_low, .. var ep_bytes]:
               {
-                var (client_ep, server_port) = (ep_bytes switch {
-                  [ var client_port_high, var client_port_low, .. var ip_bytes ] when ip_bytes.Count == 4 || ip_bytes.Count == 16
+                var (client_ep, server_port) = (ep_bytes switch
+                {
+                  [var client_port_high, var client_port_low, .. var ip_bytes] when ip_bytes.Count == 4 || ip_bytes.Count == 16
                     => new IPEndPoint(new IPAddress(ep_bytes[2..]), client_port_low + (client_port_high << 8)),
                   _ => ep_none 
                 }, port_low + (port_high << 8));
