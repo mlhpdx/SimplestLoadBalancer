@@ -1,5 +1,6 @@
 name: simplest-load-balancer
-adopt-info: version
+adopt-info: 
+  - version
 summary: Sessionless UDP Load Balancer
 description: |
   SLB is a sessionless load balancer for UDP traffic, and solves

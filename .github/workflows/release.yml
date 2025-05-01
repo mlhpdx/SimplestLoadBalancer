@@ -38,7 +38,7 @@ jobs:
         curl -sSL -XPOST -H "$AUTH" --upload-file "$FILE" --header "Content-Type:application/octet-stream" --write-out "%{http_code}" --output $(mktemp) "$URL"
   snap:
     needs: publish
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: snapcore/action-build@v1
