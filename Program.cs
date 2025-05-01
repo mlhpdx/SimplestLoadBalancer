@@ -64,7 +64,8 @@ namespace SimplestLoadBalancer
     /// <summary>
     /// Sessionless UDP Load Balancer sends packets to targets without session affinity.
     /// </summary>
-    /// <param name="serverPortRange">Set the ports to listen to and forward to backend targets</param>
+    /// <param name="serverPortRange">Set the ports to listen to and forward to backend targets (can't overlap with internalPortRange or contain adminPort)</param>
+    /// <param name="internalPortRange">Set the ports to use to forward to backend targets (can't overlap with serverPortRange or contain adminPort)</param>
     /// <param name="adminIp">Set the IP to listen on for watchdog events (default is first private IP)</param>
     /// <param name="adminPort">Set the port that targets will send watchdog events</param>
     /// <param name="clientTimeout">Seconds to allow before cleaning-up idle clients</param>
@@ -75,7 +76,7 @@ namespace SimplestLoadBalancer
     /// <param name="defaultGroupId">Sets the group ID to assign to backends that when a registration packet doesn't include one, and when port isn't assigned a group</param>
     /// <param name="useProxyProtocol">When specified packet data will be prepended with a Proxy Protocol v2 header when sent to the backend</param>
     /// <param name="proxyProtocolTLV">Use to specify one or more TLVs to add to PPv2 headers (ignored when PPv2 isn't enabled). Example value: "0xDA=smurf".</param>
-  static async Task Main(string serverPortRange = "1812-1813", IPAddress adminIp = default, int adminPort = 1111, uint clientTimeout = 30, uint targetTimeout = 30, byte defaultTargetWeight = 100, bool unwise = false, ushort statsPeriodMs = 1000, byte defaultGroupId = 0, bool useProxyProtocol = false, string[] proxyProtocolTLV = default)
+  static async Task Main(string serverPortRange = "1812-1813", string internalPortRange = "32048-62048", IPAddress adminIp = default, int adminPort = 1111, uint clientTimeout = 30, uint targetTimeout = 30, byte defaultTargetWeight = 100, bool unwise = false, ushort statsPeriodMs = 1000, byte defaultGroupId = 0, bool useProxyProtocol = false, string[] proxyProtocolTLV = default)
     {
       var ports = serverPortRange.Split("-", StringSplitOptions.RemoveEmptyEntries) switch
       {
@@ -83,14 +84,25 @@ namespace SimplestLoadBalancer
         string[] a when a.Length == 2 => (from: int.Parse(a[0]), to: int.Parse(a[1])).Enumerate().ToArray(),
         _ => throw new ArgumentException($"Invalid server port range: {serverPortRange}.", nameof(serverPortRange))
       };
+      var internal_ports = internalPortRange.Split("-", StringSplitOptions.RemoveEmptyEntries) switch
+      {
+        string[] a when a.Length == 1 => [int.Parse(a[0])],
+        string[] a when a.Length == 2 => (from: int.Parse(a[0]), to: int.Parse(a[1])).Enumerate().ToArray(),
+        _ => throw new ArgumentException($"Invalid internal port range: {internalPortRange}.", nameof(internalPortRange))
+      };
+
+      if (ports.Intersect(internal_ports).Any()) {
+        throw new ArgumentException($"Server and internal port ranges must not overlap and mustn't include the admin port: {serverPortRange}, {internalPortRange} and {adminPort}.", nameof(serverPortRange));
+      }
 
       await Console.Out.WriteLineAsync($"{DateTime.UtcNow:s}: Welcome to the simplest UDP Load Balancer.  Hit Ctrl-C to Stop.");
 
       var my_ip = NetworkInterface.GetAllNetworkInterfaces().Private().First();
       var admin_ip = adminIp ?? my_ip;
       await Console.Out.WriteLineAsync($"{DateTime.UtcNow:s}: The server port range is {serverPortRange} ({ports.Length} port{(ports.Length > 1 ? "s" : "")}).");
-      await Console.Out.WriteLineAsync($"{DateTime.UtcNow:s}: The watchdog endpoint is {admin_ip}:{adminPort}.");
-      await Console.Out.WriteLineAsync($"{DateTime.UtcNow:s}: Timeouts are: {clientTimeout}s for clients, and {targetTimeout}s  for targets.");
+      await Console.Out.WriteLineAsync($"{DateTime.UtcNow:s}: The internal port range is {internalPortRange} ({internal_ports.Length} port{(internal_ports.Length > 1 ? "s" : "")}).");
+      await Console.Out.WriteLineAsync($"{DateTime.UtcNow:s}: The admin/watchdog endpoint is {admin_ip}:{adminPort}.");
+      await Console.Out.WriteLineAsync($"{DateTime.UtcNow:s}: Timeouts are: {clientTimeout}s for clients, and {targetTimeout}s for targets.");
       await Console.Out.WriteLineAsync($"{DateTime.UtcNow:s}: Proxy Protocol v2 for targets is {(useProxyProtocol ? "enabled" : "disabled")}.");
       await Console.Out.WriteLineAsync($"{DateTime.UtcNow:s}: {(unwise ? "*WARNING* " : string.Empty)}"
         + $"Targets with public IPs {(unwise ? "WILL BE" : "will NOT be")} allowed.");
@@ -129,8 +141,9 @@ namespace SimplestLoadBalancer
       var backend_groups = new ConcurrentDictionary<byte, ConcurrentDictionary<IPAddress, (byte weight, DateTime seen)>>();
       var port_group_map = new ConcurrentDictionary<int, byte>(ports.ToDictionary(p => p, p => defaultGroupId));
 
-      var clients = new ConcurrentDictionary<(IPEndPoint remote, int external_port), (UdpClient internal_client, DateTime seen)>();
+      var clients = new ConcurrentDictionary<(IPEndPoint remote, int external_port), (int internal_port, UdpClient internal_client, DateTime seen)>();
       var servers = ports.ToDictionary(p => p, p => new UdpClient(p).Configure());
+      var free_internal_ports = new Queue<int>(internal_ports);
 
       // helper to get requests (inbound packets from external sources) asyncronously
       async IAsyncEnumerable<(UdpReceiveResult result, int port)> requests()
@@ -194,7 +207,13 @@ namespace SimplestLoadBalancer
         {
           Interlocked.Increment(ref received);
 
-          var (internal_client, _) = clients.AddOrUpdate((request.RemoteEndPoint, port), ep => (new UdpClient().Configure(), DateTime.UtcNow), (ep, c) => (c.internal_client, DateTime.UtcNow));
+          var (_, internal_client, _) = clients.AddOrUpdate((request.RemoteEndPoint, port), 
+            ep => {
+              var internal_port = free_internal_ports.Dequeue();
+              return (internal_port, new UdpClient().Configure(), DateTime.UtcNow);
+            }, 
+            (ep, c) => (c.internal_port, c.internal_client, DateTime.UtcNow)
+          );
           if (backend_groups.TryGetValue(port_group_map[port], out var group))
           {
             var backend = group.Random();
@@ -327,7 +346,8 @@ namespace SimplestLoadBalancer
                 }, port_low + (port_high << 8));
 
                 if (clients.TryGetValue((client_ep, server_port), out var info)) {
-                  await control.SendAsync([ 0x2e, 0x12, port_high, port_low, ..ep_bytes ], 4 + ep_bytes.Count, packet.RemoteEndPoint);
+                  var internal_port = info.internal_port;
+                  await control.SendAsync([0x2e, 0x12, (byte)(internal_port >> 8), (byte)internal_port, port_high, port_low, .. ep_bytes], 6 + ep_bytes.Count, packet.RemoteEndPoint);
                 }
               } 
               break;
@@ -358,6 +378,7 @@ namespace SimplestLoadBalancer
         {
           clients.TryRemove(c, out var info);
           info.internal_client.Dispose();
+          free_internal_ports.Enqueue(info.internal_port);
           await Console.Out.WriteLineAsync($"{DateTime.UtcNow:s}: Expired client {c} (last seen {info.seen:s}).");
         }
       }
