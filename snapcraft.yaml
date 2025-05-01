@@ -39,7 +39,7 @@ parts:
       - wget
     override-build: |
       craftctl default
-      wget -O release.zip $URL_X64
+      wget -O release.zip https://github.com/mlhpdx/SimplestLoadBalancer/releases/download/${SNAP_VERSION}/SimplestLoadBalancer-${SNAP_VERSION}-linux-x64.zip
       unzip release.zip
       mkdir -p $CRAFT_PART_INSTALL/bin/
       cp $CRAFT_PART_SRC/publish/SimplestLoadBalancer $CRAFT_PART_INSTALL/bin/

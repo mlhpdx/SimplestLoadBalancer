@@ -45,8 +45,8 @@ jobs:
         id: build
         env: 
           VERSION: ${{ github.ref_name }}
-          URL_X64: https://github.com/mlhpdx/SimplestLoadBalancer/releases/download/${{ github.ref_name }}/SimplestLoadBalancer-${{ github.ref_name }}-win-x64.msi
-          URL_ARM64: https://github.com/mlhpdx/SimplestLoadBalancer/releases/download/${{ github.ref_name }}/SimplestLoadBalancer-${{ github.ref_name }}-win-arm64.msi
+          URL_X64: https://github.com/mlhpdx/SimplestLoadBalancer/releases/download/${{ github.ref_name }}/SimplestLoadBalancer-${{ github.ref_name }}-linux-x64.zip
+          URL_ARM64: https://github.com/mlhpdx/SimplestLoadBalancer/releases/download/${{ github.ref_name }}/SimplestLoadBalancer-${{ github.ref_name }}-linux-arm.zip
       - uses: snapcore/action-publish@v1
         env:
           SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.STORE_LOGIN }}
