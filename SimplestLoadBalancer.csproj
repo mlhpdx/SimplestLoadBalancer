@@ -6,11 +6,12 @@
     <Authors>mlhpdx</Authors>
     <Product>SimplestLoadBalancer</Product>
     <Description>Sessionless Load Balancer for UDP</Description>
+    <PublishAot>true</PublishAot>
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="DotMake.CommandLine" Version="2.8.0" />
     <PackageReference Include="IPNetwork2" Version="3.1.764" />
-    <PackageReference Include="System.CommandLine.DragonFruit" Version="0.4.0-alpha.22272.1" />
   </ItemGroup>
 
 </Project>

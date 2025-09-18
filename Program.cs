@@ -7,6 +7,10 @@ using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
+using DotMake.CommandLine;
+
+Cli.Run(async (string serverPortRange = "1812-1813", string internalPortRange = "32048-62048", IPAddress adminIp = default, int adminPort = 1111, uint clientTimeout = 30, uint targetTimeout = 30, byte defaultTargetWeight = 100, bool unwise = false, ushort statsPeriodMs = 1000, byte defaultGroupId = 0, bool useProxyProtocol = false, string[] proxyProtocolTLV = default) =>
+  await SimplestLoadBalancer.Program.RunAsync(serverPortRange, internalPortRange, adminIp, adminPort, clientTimeout, targetTimeout, defaultTargetWeight, unwise, statsPeriodMs, defaultGroupId, useProxyProtocol, proxyProtocolTLV));
 
 namespace SimplestLoadBalancer
 {
@@ -76,7 +80,7 @@ namespace SimplestLoadBalancer
     /// <param name="defaultGroupId">Sets the group ID to assign to backends that when a registration packet doesn't include one, and when port isn't assigned a group</param>
     /// <param name="useProxyProtocol">When specified packet data will be prepended with a Proxy Protocol v2 header when sent to the backend</param>
     /// <param name="proxyProtocolTLV">Use to specify one or more TLVs to add to PPv2 headers (ignored when PPv2 isn't enabled). Example value: "0xDA=smurf".</param>
-  static async Task Main(string serverPortRange = "1812-1813", string internalPortRange = "32048-62048", IPAddress adminIp = default, int adminPort = 1111, uint clientTimeout = 30, uint targetTimeout = 30, byte defaultTargetWeight = 100, bool unwise = false, ushort statsPeriodMs = 1000, byte defaultGroupId = 0, bool useProxyProtocol = false, string[] proxyProtocolTLV = default)
+    public static async Task RunAsync(string serverPortRange, string internalPortRange, IPAddress adminIp, int adminPort, uint clientTimeout, uint targetTimeout, byte defaultTargetWeight, bool unwise, ushort statsPeriodMs, byte defaultGroupId, bool useProxyProtocol, string[] proxyProtocolTLV)
     {
       var ports = serverPortRange.Split("-", StringSplitOptions.RemoveEmptyEntries) switch
       {
@@ -91,7 +95,8 @@ namespace SimplestLoadBalancer
         _ => throw new ArgumentException($"Invalid internal port range: {internalPortRange}.", nameof(internalPortRange))
       };
 
-      if (ports.Intersect(internal_ports).Any()) {
+      if (ports.Intersect(internal_ports).Any())
+      {
         throw new ArgumentException($"Server and internal port ranges must not overlap and mustn't include the admin port: {serverPortRange}, {internalPortRange} and {adminPort}.", nameof(serverPortRange));
       }
 
@@ -207,11 +212,12 @@ namespace SimplestLoadBalancer
         {
           Interlocked.Increment(ref received);
 
-          var (_, internal_client, _) = clients.AddOrUpdate((request.RemoteEndPoint, port), 
-            ep => {
+          var (_, internal_client, _) = clients.AddOrUpdate((request.RemoteEndPoint, port),
+            ep =>
+            {
               var internal_port = free_internal_ports.Dequeue();
               return (internal_port, new UdpClient().Configure(), DateTime.UtcNow);
-            }, 
+            },
             (ep, c) => (c.internal_port, c.internal_client, DateTime.UtcNow)
           );
           if (backend_groups.TryGetValue(port_group_map[port], out var group))
@@ -270,7 +276,7 @@ namespace SimplestLoadBalancer
                 (
                   ip: command switch
                   {
-                  [0, 0, 0, 0, 0, 0, 0, 0, ..] => packet.RemoteEndPoint.Address,
+                    [0, 0, 0, 0, 0, 0, 0, 0, ..] => packet.RemoteEndPoint.Address,
                     _ => new IPAddress(command.Slice(0, 8))
                   },
                   weight: options switch { [var weight, ..] => weight, _ => defaultTargetWeight },
@@ -281,7 +287,7 @@ namespace SimplestLoadBalancer
                 (
                   ip: command switch
                   {
-                  [0, 0, 0, 0, ..] => packet.RemoteEndPoint.Address,
+                    [0, 0, 0, 0, ..] => packet.RemoteEndPoint.Address,
                     _ => new IPAddress(command.Slice(0, 4))
                   },
                   weight: options switch { [var weight, ..] => weight, _ => defaultTargetWeight },
@@ -342,14 +348,15 @@ namespace SimplestLoadBalancer
                 {
                   [var client_port_high, var client_port_low, .. var ip_bytes] when ip_bytes.Count == 4 || ip_bytes.Count == 16
                     => new IPEndPoint(new IPAddress(ep_bytes[2..]), client_port_low + (client_port_high << 8)),
-                  _ => ep_none 
+                  _ => ep_none
                 }, port_low + (port_high << 8));
 
-                if (clients.TryGetValue((client_ep, server_port), out var info)) {
+                if (clients.TryGetValue((client_ep, server_port), out var info))
+                {
                   var internal_port = info.internal_port;
                   await control.SendAsync([0x2e, 0x12, (byte)(internal_port >> 8), (byte)internal_port, port_high, port_low, .. ep_bytes], 6 + ep_bytes.Count, packet.RemoteEndPoint);
                 }
-              } 
+              }
               break;
 
             default:
