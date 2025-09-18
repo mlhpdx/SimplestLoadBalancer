@@ -21,7 +21,7 @@ jobs:
         echo "VERSION=${{ github.ref_name }}" >> $GITHUB_OUTPUT
         echo "RELEASE_ID=$(jq --raw-output '.release.id' $GITHUB_EVENT_PATH)" >> $GITHUB_OUTPUT
     - name: Publish for OS
-      run: dotnet publish SimplestLoadBalancer.csproj -o ./slb-${{ matrix.rid }} -c Release -r ${{ matrix.rid }} /p:PublishSingleFile=true /p:PublishReadyToRun=true /p:Version=${{ steps.get_version.outputs.VERSION }} --self-contained
+      run: dotnet publish SimplestLoadBalancer.csproj -o ./slb-${{ matrix.rid }} -c Release -r ${{ matrix.rid }} /p:Version=${{ steps.get_version.outputs.VERSION }}
     - name: Zip it Up
       run: zip -r -j SimplestLoadBalancer-${{ steps.get_version.outputs.VERSION }}-${{ matrix.rid }}.zip ./slb-${{ matrix.rid }} 
     - name: Upload ZIP to Releaase

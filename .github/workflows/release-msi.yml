@@ -25,7 +25,7 @@ jobs:
         echo "VERSION=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
         echo "RELEASE_ID=$(jq --raw-output '.release.id' $GITHUB_EVENT_PATH)" >> "$GITHUB_OUTPUT"
     - name: Publish for OS
-      run: dotnet publish SimplestLoadBalancer.csproj -o ./publish/win-${{ matrix.rid }} -c Release -r win-${{ matrix.rid }} /p:PublishSingleFile=true /p:PublishReadyToRun=true /p:Version=${{ steps.get_version.outputs.VERSION }} --self-contained
+      run: dotnet publish SimplestLoadBalancer.csproj -o ./publish/win-${{ matrix.rid }} -c Release -r win-${{ matrix.rid }} /p:Version=${{ steps.get_version.outputs.VERSION }}
     - name: Add msbuild to PATH
       uses: microsoft/setup-msbuild@v2
     - name: Install WiX
