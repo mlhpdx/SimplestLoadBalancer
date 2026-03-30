@@ -5,10 +5,16 @@ on:
       - created
 jobs:
   publish:
-    runs-on: ubuntu-latest
     strategy:
         matrix:
-            rid: [win-x64, linux-x64, linux-arm]
+          include:
+            - rid: win-x64
+              os: windows-latest
+            - rid: linux-x64
+              os: ubuntu-latest
+            - rid: linux-arm
+              os: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v6
     - name: Setup .NET Core
