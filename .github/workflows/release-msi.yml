@@ -26,6 +26,22 @@ jobs:
         echo "RELEASE_ID=$(jq --raw-output '.release.id' $GITHUB_EVENT_PATH)" >> "$GITHUB_OUTPUT"
     - name: Publish for OS
       run: dotnet publish SimplestLoadBalancer.csproj -o ./publish/win-${{ matrix.rid }} -c Release -r win-${{ matrix.rid }} /p:Version=${{ steps.get_version.outputs.VERSION }}
+    - name: Zip it Up
+      shell: bash
+      run: zip -r -j SimplestLoadBalancer-${{ github.ref_name }}-${{ matrix.rid }}.zip ./slb-${{ matrix.rid }}
+    - name: Upload ZIP to Release
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        VERSION: ${{ github.ref_name }}
+        FILE: SimplestLoadBalancer-${{ github.ref_name }}-${{ matrix.rid }}.zip
+        URL: https://uploads.github.com/repos/${{ github.repository }}/releases/${{ steps.get_version.outputs.RELEASE_ID }}/assets?name=SimplestLoadBalancer-${{ github.ref_name }}-${{ matrix.rid }}.zip
+      run: |
+        echo $VERSION
+        echo $URL
+        AUTH="Authorization: token $GITHUB_TOKEN"
+        echo $AUTH
+        curl -sSL -XPOST -H "$AUTH" --upload-file "$FILE" --header "Content-Type:application/octet-stream" --write-out "%{http_code}" --output $(mktemp) "$URL"
     - name: Add msbuild to PATH
       uses: microsoft/setup-msbuild@v3
     - name: Install WiX
@@ -34,14 +50,14 @@ jobs:
         wix extension add WixToolset.UI.wixext
         wix extension add WixToolset.Firewall.wixext
     - name: Build WiX on Windows
-      run: wix build package.wxs -arch ${{ matrix.rid }} -define Version=${{ steps.get_version.outputs.VERSION }} -define PublishDir=./publish/win-${{ matrix.rid }} -o SimplestLoadBalancer-${{ steps.get_version.outputs.VERSION }}-win-${{ matrix.rid }}.msi -ext WixToolset.UI.wixext -ext WixToolset.Firewall.wixext
+      run: wix build package.wxs -arch ${{ matrix.rid }} -define Version=${{ github.ref_name }} -define PublishDir=./publish/win-${{ matrix.rid }} -o SimplestLoadBalancer-${{ github.ref_name }}-win-${{ matrix.rid }}.msi -ext WixToolset.UI.wixext -ext WixToolset.Firewall.wixext
     - name: Upload MSI to Releaase
       shell: bash
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        VERSION: ${{ steps.get_version.outputs.VERSION }}
-        FILE: SimplestLoadBalancer-${{ steps.get_version.outputs.VERSION }}-win-${{ matrix.rid }}.msi
-        URL: https://uploads.github.com/repos/${{ github.repository }}/releases/${{ steps.get_version.outputs.RELEASE_ID }}/assets?name=SimplestLoadBalancer-${{ steps.get_version.outputs.VERSION }}-win-${{ matrix.rid }}.msi
+        VERSION: ${{ github.ref_name }}
+        FILE: SimplestLoadBalancer-${{ github.ref_name }}-win-${{ matrix.rid }}.msi
+        URL: https://uploads.github.com/repos/${{ github.repository }}/releases/${{ steps.get_version.outputs.RELEASE_ID }}/assets?name=SimplestLoadBalancer-${{ github.ref_name }}-win-${{ matrix.rid }}.msi
       run: |
         echo $VERSION
         echo $URL
