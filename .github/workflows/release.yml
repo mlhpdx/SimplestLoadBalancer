@@ -14,7 +14,7 @@ jobs:
           - rid: linux-arm
             os: ubuntu-latest
             apt_packages: lld gcc-arm-linux-gnueabihf
-            publish_args: /p:CppCompilerAndLinker=clang /p:LinkerFlavor=lld /p:SysRoot=/usr/arm-linux-gnueabihf
+            publish_args: /p:CppCompilerAndLinker=clang /p:LinkerFlavor=lld 
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v6
