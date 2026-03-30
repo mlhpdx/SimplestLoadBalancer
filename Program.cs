@@ -5,12 +5,31 @@ using System.Linq;
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using DotMake.CommandLine;
 
-Cli.Run(async (string serverPortRange = "1812-1813", string internalPortRange = "32048-62048", IPAddress adminIp = default, int adminPort = 1111, uint clientTimeout = 30, uint targetTimeout = 30, byte defaultTargetWeight = 100, bool unwise = false, ushort statsPeriodMs = 1000, byte defaultGroupId = 0, bool useProxyProtocol = false, string[] proxyProtocolTLV = default) =>
-  await SimplestLoadBalancer.Program.RunAsync(serverPortRange, internalPortRange, adminIp, adminPort, clientTimeout, targetTimeout, defaultTargetWeight, unwise, statsPeriodMs, defaultGroupId, useProxyProtocol, proxyProtocolTLV));
+var cts = new CancellationTokenSource();
+var tasks = new List<Task>();
+
+Console.CancelKeyPress += (s, e) =>
+{
+  e.Cancel = true; // don't kill the process immediately, let it clean up
+  if (!cts.IsCancellationRequested) cts.Cancel();
+  Console.WriteLine($"{DateTime.UtcNow:s}: Ctrl-C received, stopping {tasks.Count} tasks...");
+};
+
+Cli.Run(async (string serverPortRange = "1812-1813", string internalPortRange = "32048-62048", IPAddress adminIp = default, int adminPort = 1111, uint clientTimeout = 30, uint targetTimeout = 30, byte defaultTargetWeight = 100, bool unwise = false, ushort statsPeriodMs = 1000, byte defaultGroupId = 0, bool useProxyProtocol = false, string[] proxyProtocolTLV = default, int udpReceiveBufferSize = 0, int udpSendBufferSize = 0) =>
+{
+  tasks = await SimplestLoadBalancer.Program.RunAsync(serverPortRange, internalPortRange, adminIp, adminPort, clientTimeout, targetTimeout, defaultTargetWeight, unwise, statsPeriodMs, defaultGroupId, useProxyProtocol, proxyProtocolTLV, udpReceiveBufferSize, udpSendBufferSize, cts.Token);
+  await Console.Out.WriteLineAsync($"{DateTime.UtcNow:s}: Running...");  
+});
+
+await Task.WhenAll(tasks);
+
+var e = string.Join(", ", tasks.Where(t => t.Exception != null).Select(t => t.Exception!.Message));
+await Console.Out.WriteLineAsync($"{DateTime.UtcNow:s}: Bye-now ({(e.Length != 0 ? e : "OK")}).");
 
 namespace SimplestLoadBalancer
 {
@@ -26,7 +45,7 @@ namespace SimplestLoadBalancer
     }
 
     public static void SendVia(this IPEndPoint backend, UdpClient client, byte[] packet, AsyncCallback cb) =>
-    client.BeginSend(packet, packet.Length, backend, cb, null);
+      client.BeginSend(packet, packet.Length, backend, cb, null);
 
     public static IEnumerable<IPAddress> Private(this NetworkInterface[] interfaces) =>
     interfaces.Where(i => i.OperationalStatus == OperationalStatus.Up)
@@ -39,8 +58,19 @@ namespace SimplestLoadBalancer
     public const int SIO_UDP_CONNRESET = -1744830452;
     public static UdpClient Configure(this UdpClient client)
     {
-      client.DontFragment = true;
+      // only set don't fragment for IPv4
+      if (client.Client.AddressFamily == AddressFamily.InterNetwork)
+      {
+        client.DontFragment = true;
+      }
       // client.Client.IOControl((IOControlCode)SIO_UDP_CONNRESET, new byte[] { 0, 0, 0, 0 }, null); // don't throw on disconnect
+      return client;
+    }
+
+    public static UdpClient WithBufferSizes(this UdpClient client, int receiveBufferSize, int sendBufferSize)
+    {
+      if (receiveBufferSize > 0) client.Client.ReceiveBufferSize = receiveBufferSize;
+      if (sendBufferSize > 0) client.Client.SendBufferSize = sendBufferSize;
       return client;
     }
 
@@ -80,7 +110,10 @@ namespace SimplestLoadBalancer
     /// <param name="defaultGroupId">Sets the group ID to assign to backends that when a registration packet doesn't include one, and when port isn't assigned a group</param>
     /// <param name="useProxyProtocol">When specified packet data will be prepended with a Proxy Protocol v2 header when sent to the backend</param>
     /// <param name="proxyProtocolTLV">Use to specify one or more TLVs to add to PPv2 headers (ignored when PPv2 isn't enabled). Example value: "0xDA=smurf".</param>
-    public static async Task RunAsync(string serverPortRange, string internalPortRange, IPAddress adminIp, int adminPort, uint clientTimeout, uint targetTimeout, byte defaultTargetWeight, bool unwise, ushort statsPeriodMs, byte defaultGroupId, bool useProxyProtocol, string[] proxyProtocolTLV)
+    /// <param name="udpReceiveBufferSize">Size of the buffer used to receive UDP packets in bytes. Default is 0 (which uses the system default).</param>
+    /// <param name="udpSendBufferSize">Size of the buffer used to send UDP packets in bytes. Default is 0 (which uses the system default).</param>
+    /// <param name="ct">Cancellation token to observe while waiting for tasks to complete.</param>
+    public static async Task<List<Task>> RunAsync(string serverPortRange, string internalPortRange, IPAddress adminIp, int adminPort, uint clientTimeout, uint targetTimeout, byte defaultTargetWeight, bool unwise, ushort statsPeriodMs, byte defaultGroupId, bool useProxyProtocol, string[] proxyProtocolTLV, int udpReceiveBufferSize = 0, int udpSendBufferSize = 0, CancellationToken ct = default)
     {
       var ports = serverPortRange.Split("-", StringSplitOptions.RemoveEmptyEntries) switch
       {
@@ -109,53 +142,47 @@ namespace SimplestLoadBalancer
       await Console.Out.WriteLineAsync($"{DateTime.UtcNow:s}: The admin/watchdog endpoint is {admin_ip}:{adminPort}.");
       await Console.Out.WriteLineAsync($"{DateTime.UtcNow:s}: Timeouts are: {clientTimeout}s for clients, and {targetTimeout}s for targets.");
       await Console.Out.WriteLineAsync($"{DateTime.UtcNow:s}: Proxy Protocol v2 for targets is {(useProxyProtocol ? "enabled" : "disabled")}.");
+      await Console.Out.WriteLineAsync($"{DateTime.UtcNow:s}: Receive and send buffer sizes are "
+        + $"{(udpReceiveBufferSize > 0 ? $"{udpReceiveBufferSize} bytes" : "system default")} and "
+        + $"{(udpSendBufferSize > 0 ? $"{udpSendBufferSize} bytes" : "system default")}, respectively.");
       await Console.Out.WriteLineAsync($"{DateTime.UtcNow:s}: {(unwise ? "*WARNING* " : string.Empty)}"
         + $"Targets with public IPs {(unwise ? "WILL BE" : "will NOT be")} allowed.");
 
-      using var cts = new CancellationTokenSource();
-
-      Console.CancelKeyPress += (s, a) =>
-      {
-        Console.Out.WriteLine($"{DateTime.UtcNow:s}: Beginning shutdown procedure.");
-        cts.Cancel();
-        a.Cancel = true;
-      };
-
       // helper to run tasks with cancellation
-      Task run(Func<Task> func, string name)
+      Task run(Func<CancellationToken, Task> func, string name, CancellationToken ct)
       {
         return Task.Run(async () =>
         {
-          var ct = cts.Token;
           while (!ct.IsCancellationRequested)
           {
             try
             {
-              await func();
+              await func(ct);
             }
+            catch (OperationCanceledException) { break; }  // clean exit
             catch (Exception e)
             {
-              await Console.Out.WriteLineAsync($"{DateTime.UtcNow:s}: *ERROR* Task {name} encountered a problem: {e.Message}");
+              await Console.Out.WriteLineAsync($"{DateTime.UtcNow:s}: *ERROR* Task {name} encountered a problem: {e.Message}\n{e.StackTrace}");
               await Task.Delay(100); // slow fail
             }
           }
-          await Console.Out.WriteLineAsync($"{DateTime.UtcNow:s}: {name} is done.");
-        });
+          await Console.Out.WriteLineAsync($"{DateTime.UtcNow:s}: {name} is done.");          
+        }, ct);
       }
 
       var backend_groups = new ConcurrentDictionary<byte, ConcurrentDictionary<IPAddress, (byte weight, DateTime seen)>>();
       var port_group_map = new ConcurrentDictionary<int, byte>(ports.ToDictionary(p => p, p => defaultGroupId));
 
       var clients = new ConcurrentDictionary<(IPEndPoint remote, int external_port), (int internal_port, UdpClient internal_client, DateTime seen)>();
-      var servers = ports.ToDictionary(p => p, p => new UdpClient(p).Configure());
+      var servers = ports.ToDictionary(p => p, p => new UdpClient(p).Configure().WithBufferSizes(udpReceiveBufferSize, udpSendBufferSize));
       var free_internal_ports = new Queue<int>(internal_ports);
 
       // helper to get requests (inbound packets from external sources) asyncronously
-      async IAsyncEnumerable<(UdpReceiveResult result, int port)> requests()
+      async IAsyncEnumerable<(UdpReceiveResult result, int port)> requests([EnumeratorCancellation] CancellationToken ct)
       {
         foreach (var s in servers)
-          if (s.Value.Available > 0)
-            yield return (await s.Value.ReceiveAsync(), s.Key);
+          if (s.Value.Available > 0 && !ct.IsCancellationRequested)
+            yield return (await s.Value.ReceiveAsync(ct), s.Key);
       }
 
       byte[] arg_to_tlv(string arg)
@@ -205,10 +232,10 @@ namespace SimplestLoadBalancer
       }
 
       // task to listen on the server port and relay packets to random backends via a client-specific internal port
-      async Task relay()
+      async Task relay(CancellationToken ct)
       {
         var any = false;
-        await foreach (var (request, port) in requests())
+        await foreach (var (request, port) in requests(ct))
         {
           Interlocked.Increment(ref received);
 
@@ -232,14 +259,14 @@ namespace SimplestLoadBalancer
       }
 
       // helper to get replies asyncronously
-      async IAsyncEnumerable<(UdpReceiveResult result, IPEndPoint ep, int port)> replies()
+      async IAsyncEnumerable<(UdpReceiveResult result, IPEndPoint ep, int port)> replies([EnumeratorCancellation] CancellationToken ct)
       {
         var any = false;
         foreach (var c in clients)
         {
           if (c.Value.internal_client.Available > 0)
           {
-            yield return (await c.Value.internal_client.ReceiveAsync(), c.Key.remote, c.Key.external_port);
+            yield return (await c.Value.internal_client.ReceiveAsync(ct), c.Key.remote, c.Key.external_port);
             any = true;
           }
         }
@@ -247,10 +274,10 @@ namespace SimplestLoadBalancer
       }
 
       // task to listen for responses from backends and re-send them to the correct external client
-      async Task reply()
+      async Task reply(CancellationToken ct)
       {
         var any = false;
-        await foreach (var (result, ep, port) in replies())
+        await foreach (var (result, ep, port) in replies(ct))
         {
           servers[port].BeginSend(result.Buffer, result.Buffer.Length, ep, s => Interlocked.Increment(ref responded), null);
           any = true;
@@ -259,16 +286,16 @@ namespace SimplestLoadBalancer
       }
 
       // task to listen for instances asking to add/remove themselves as a target (watch-dog pattern)
-      using var control = new IPEndPoint(admin_ip, adminPort).MakeUdpClient();
+      var control = new IPEndPoint(admin_ip, adminPort).MakeUdpClient();
       var ep_none = new IPEndPoint(IPAddress.None, 0);
-      async Task admin()
+      async Task admin(CancellationToken ct)
       {
         if (control.Available > 0)
         {
-          var packet = await control.ReceiveAsync();
-          var payload = new ArraySegment<byte>(packet.Buffer);
+          var packet = await control.ReceiveAsync(ct);
+          var payload = packet.Buffer.AsSpan();
 
-          (IPAddress ip, byte weight, byte group_id) get_ip_weight_and_group(ArraySegment<byte> command) =>
+          (IPAddress ip, byte weight, byte group_id) get_ip_weight_and_group(Span<byte> command) =>
             command switch
             {
               // eight bytes for ip, then options
@@ -277,7 +304,7 @@ namespace SimplestLoadBalancer
                   ip: command switch
                   {
                     [0, 0, 0, 0, 0, 0, 0, 0, ..] => packet.RemoteEndPoint.Address,
-                    _ => new IPAddress(command.Slice(0, 8))
+                    _ => new IPAddress(command[..8])
                   },
                   weight: options switch { [var weight, ..] => weight, _ => defaultTargetWeight },
                   group_id: options switch { [_, var group, ..] => group, _ => defaultGroupId }
@@ -288,7 +315,7 @@ namespace SimplestLoadBalancer
                   ip: command switch
                   {
                     [0, 0, 0, 0, ..] => packet.RemoteEndPoint.Address,
-                    _ => new IPAddress(command.Slice(0, 4))
+                    _ => new IPAddress(command[..4])
                   },
                   weight: options switch { [var weight, ..] => weight, _ => defaultTargetWeight },
                   group_id: options switch { [_, var group, ..] => group, _ => defaultGroupId }
@@ -346,7 +373,7 @@ namespace SimplestLoadBalancer
               {
                 var (client_ep, server_port) = (ep_bytes switch
                 {
-                  [var client_port_high, var client_port_low, .. var ip_bytes] when ip_bytes.Count == 4 || ip_bytes.Count == 16
+                  [var client_port_high, var client_port_low, .. var ip_bytes] when ip_bytes.Length == 4 || ip_bytes.Length == 16
                     => new IPEndPoint(new IPAddress(ep_bytes[2..]), client_port_low + (client_port_high << 8)),
                   _ => ep_none
                 }, port_low + (port_high << 8));
@@ -354,7 +381,8 @@ namespace SimplestLoadBalancer
                 if (clients.TryGetValue((client_ep, server_port), out var info))
                 {
                   var internal_port = info.internal_port;
-                  await control.SendAsync([0x2e, 0x12, (byte)(internal_port >> 8), (byte)internal_port, port_high, port_low, .. ep_bytes], 6 + ep_bytes.Count, packet.RemoteEndPoint);
+                  byte[] buffer = [0x2e, 0x12, (byte)(internal_port >> 8), (byte)internal_port, port_high, port_low, .. ep_bytes];
+                  await control.SendAsync(buffer.AsMemory(), packet.RemoteEndPoint, ct);
                 }
               }
               break;
@@ -368,7 +396,7 @@ namespace SimplestLoadBalancer
       }
 
       // task to remove backends and clients we haven't heard from in a while
-      async Task prune()
+      async Task prune(CancellationToken ct)
       {
         await Task.Delay(100);
         foreach (var backends in backend_groups.Values)
@@ -391,25 +419,23 @@ namespace SimplestLoadBalancer
       }
 
       // task to occassionally write statistics to the console
-      async Task stats()
+      async Task stats(CancellationToken ct)
       {
         await Console.Out.WriteLineAsync($"{DateTime.UtcNow:s}: {received}/{relayed}/{responded}, {clients.Count} => {backend_groups.Count}/{backend_groups.Sum(g => g.Value.Count)}({backend_groups.Values.SelectMany(g => g).Distinct().Count()})");
-        try { await Task.Delay(statsPeriodMs, cts.Token); } catch { /* suppress cancel */ }
+        try { await Task.Delay(statsPeriodMs, ct); } catch { /* suppress cancel */ }
       }
 
       var tasks = new[] {
-          run(relay, "Relay"),
-          run(reply, "Reply"),
-          run(admin, "Admin"),
-          run(prune, "Prune")
+          run(relay, "Relay", ct),
+          run(reply, "Reply", ct),
+          run(admin, "Admin", ct),
+          run(prune, "Prune", ct)
         }.ToList();
 
       if (statsPeriodMs > 0)
-        tasks.Add(run(stats, "State"));
+        tasks.Add(run(stats, "State", ct));
 
-      await Task.WhenAll(tasks);
-      var e = string.Join(", ", tasks.Where(t => t.Exception != null).Select(t => t.Exception.Message));
-      await Console.Out.WriteLineAsync($"{DateTime.UtcNow:s}: Bye-now ({(e.Length != 0 ? e : "OK")}).");
+      return tasks;
     }
   }
 }

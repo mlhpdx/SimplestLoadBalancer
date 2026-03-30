@@ -64,6 +64,8 @@ Options:
                                                    include one, and when port isn't assigned a group [default: 0]
   --use-proxy-protocol                             When specified packet data will be prepended with a Proxy Protocol v2 header 
                                                    when sent to the backend [default: False]
+  --udp-receive-buffer-size                        [default: 0]
+  --udp-send-buffer-size                           [default: 0]
   --version                                        Show version information
   -?, -h, --help                                   Show help and usage information
 ```
@@ -195,7 +197,7 @@ $ watch -n10 ./lb.sh
 
 ## Building ##
 
-Pre-built binaries for Linux and Windows x64, and Linux ARM are available as GitHub "Releases". This is a very simple .Net 8.0 project, so to build it run (assuming you have dotnet-sdk-8.0 installed):
+Pre-built binaries for Linux and Windows x64, and Linux ARM are available as GitHub "Releases". This is a very simple .Net 10.0 project, so to build it run (assuming you have dotnet-sdk-10.0 installed):
 
 ```
 dotnet build
@@ -212,7 +214,7 @@ dotnet publish -o ./ -c Release -r linux-x64 /p:PublishSingleFile=true /p:Publis
 For Windows:
 
 ```
-dotnet publish -o ./ -c Release -r win10-x64 /p:PublishSingleFile=true /p:PublishReadyToRun=true --self-contained
+dotnet publish -o ./ -c Release -r win-x64 /p:PublishSingleFile=true /p:PublishReadyToRun=true --self-contained
 ```
 
 Likewise, it's simple to run using `dotnet run` in the project directory:
