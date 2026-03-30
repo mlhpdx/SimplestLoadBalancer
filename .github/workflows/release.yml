@@ -13,7 +13,8 @@ jobs:
             os: ubuntu-latest
           - rid: linux-arm
             os: ubuntu-latest
-            cross_toolchain: gcc-arm-linux-gnueabihf
+            apt_packages: lld gcc-arm-linux-gnueabihf
+            publish_args: /p:CppCompilerAndLinker=clang /p:LinkerFlavor=lld /p:SysRoot=/usr/arm-linux-gnueabihf
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v6
@@ -26,12 +27,13 @@ jobs:
       run: | 
         echo "VERSION=${{ github.ref_name }}" >> $GITHUB_OUTPUT
         echo "RELEASE_ID=$(jq --raw-output '.release.id' $GITHUB_EVENT_PATH)" >> $GITHUB_OUTPUT
-    - name: Install ARM cross-compilation toolchain
+    - name: Install cross-compilation toolchain
+      if: matrix.apt_packages
       run: |
         sudo apt-get update
-        sudo apt-get install -y lld
+        sudo apt-get install -y ${{ matrix.apt_packages }}
     - name: Publish for OS
-      run: dotnet publish SimplestLoadBalancer.csproj -o ./slb-${{ matrix.rid }} -c Release -r ${{ matrix.rid }} /p:Version=${{ github.ref_name }} /p:CppCompilerAndLinker=clang /p:LinkerFlavor=lld
+      run: dotnet publish SimplestLoadBalancer.csproj -o ./slb-${{ matrix.rid }} -c Release -r ${{ matrix.rid }} /p:Version=${{ github.ref_name }} ${{ matrix.publish_args }}
     - name: Zip it Up
       run: zip -r -j SimplestLoadBalancer-${{ github.ref_name }}-${{ matrix.rid }}.zip ./slb-${{ matrix.rid }}
     - name: Upload ZIP to Release
@@ -62,5 +64,4 @@ jobs:
           SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.STORE_LOGIN }}
         with:
           snap: ${{ steps.build.outputs.snap }}
-          release: stable    
-      
+          release: stable
