@@ -6,14 +6,16 @@ on:
 jobs:
   publish:
     strategy:
-        matrix:
-          include:
-            - rid: win-x64
-              os: windows-latest
-            - rid: linux-x64
-              os: ubuntu-latest
-            - rid: linux-arm
-              os: ubuntu-latest
+      fail-fast: false
+      matrix:
+        include:
+          - rid: win-x64
+            os: windows-latest
+          - rid: linux-x64
+            os: ubuntu-latest
+          - rid: linux-arm
+            os: ubuntu-latest
+            cross_toolchain: gcc-arm-linux-gnueabihf
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v6
@@ -26,11 +28,14 @@ jobs:
       run: | 
         echo "VERSION=${{ github.ref_name }}" >> $GITHUB_OUTPUT
         echo "RELEASE_ID=$(jq --raw-output '.release.id' $GITHUB_EVENT_PATH)" >> $GITHUB_OUTPUT
+    - name: Install ARM cross-compilation toolchain
+      if: matrix.cross_toolchain != ''
+      run: sudo apt-get install -y ${{ matrix.cross_toolchain }}
     - name: Publish for OS
       run: dotnet publish SimplestLoadBalancer.csproj -o ./slb-${{ matrix.rid }} -c Release -r ${{ matrix.rid }} /p:Version=${{ steps.get_version.outputs.VERSION }}
     - name: Zip it Up
       run: zip -r -j SimplestLoadBalancer-${{ steps.get_version.outputs.VERSION }}-${{ matrix.rid }}.zip ./slb-${{ matrix.rid }} 
-    - name: Upload ZIP to Releaase
+    - name: Upload ZIP to Release
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         VERSION: ${{ steps.get_version.outputs.VERSION }}
