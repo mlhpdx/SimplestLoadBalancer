@@ -32,7 +32,7 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y --fix-missing ${{ matrix.cross_toolchain }}
     - name: Publish for OS
-      run: dotnet publish SimplestLoadBalancer.csproj -o ./slb-${{ matrix.rid }} -c Release -r ${{ matrix.rid }} /p:Version=${{ github.ref_name }}
+      run: dotnet publish SimplestLoadBalancer.csproj -o ./slb-${{ matrix.rid }} -c Release -r ${{ matrix.rid }} /p:Version=${{ github.ref_name }} /p:CppCompilerAndLinker=arm-linux-gnueabihf-gcc /p:SysRoot=/usr/arm-linux-gnueabihf
     - name: Zip it Up
       run: zip -r -j SimplestLoadBalancer-${{ github.ref_name }}-${{ matrix.rid }}.zip ./slb-${{ matrix.rid }}
     - name: Upload ZIP to Release
