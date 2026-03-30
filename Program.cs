@@ -10,7 +10,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using DotMake.CommandLine;
 
-var cts = new CancellationTokenSource();
+using var cts = new CancellationTokenSource();
 var tasks = new List<Task>();
 
 Console.CancelKeyPress += (s, e) =>
@@ -163,7 +163,7 @@ namespace SimplestLoadBalancer
             catch (Exception e)
             {
               await Console.Out.WriteLineAsync($"{DateTime.UtcNow:s}: *ERROR* Task {name} encountered a problem: {e.Message}\n{e.StackTrace}");
-              await Task.Delay(100); // slow fail
+              await Task.Delay(100, ct); // slow fail
             }
           }
           await Console.Out.WriteLineAsync($"{DateTime.UtcNow:s}: {name} is done.");          
@@ -255,7 +255,7 @@ namespace SimplestLoadBalancer
           }
           any = true;
         }
-        if (!any) await Task.Delay(10); // slack the loop
+        if (!any) await Task.Delay(10, ct); // slack the loop
       }
 
       // helper to get replies asyncronously
@@ -270,7 +270,7 @@ namespace SimplestLoadBalancer
             any = true;
           }
         }
-        if (!any) await Task.Delay(10); // slack the loop
+        if (!any) await Task.Delay(10, ct); // slack the loop
       }
 
       // task to listen for responses from backends and re-send them to the correct external client
@@ -282,7 +282,7 @@ namespace SimplestLoadBalancer
           servers[port].BeginSend(result.Buffer, result.Buffer.Length, ep, s => Interlocked.Increment(ref responded), null);
           any = true;
         }
-        if (!any) await Task.Delay(10); // slack the loop
+        if (!any) await Task.Delay(10, ct); // slack the loop
       }
 
       // task to listen for instances asking to add/remove themselves as a target (watch-dog pattern)
@@ -392,13 +392,13 @@ namespace SimplestLoadBalancer
               break;
           }
         }
-        else await Task.Delay(10);
+        else await Task.Delay(10, ct);
       }
 
       // task to remove backends and clients we haven't heard from in a while
       async Task prune(CancellationToken ct)
       {
-        await Task.Delay(100);
+        await Task.Delay(100, ct);
         foreach (var backends in backend_groups.Values)
         {
           var remove_backends = backends.Where(kv => kv.Value.seen < DateTime.UtcNow.AddSeconds(-targetTimeout)).Select(kv => kv.Key).ToArray();
