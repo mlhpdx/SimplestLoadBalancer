@@ -27,14 +27,14 @@ jobs:
     - name: Publish for OS
       run: dotnet publish SimplestLoadBalancer.csproj -o ./publish/win-${{ matrix.rid }} -c Release -r win-${{ matrix.rid }} /p:Version=${{ github.ref_name }}
     - name: Zip it Up
-      run: tar -a -c -f SimplestLoadBalancer-${{ github.ref_name }}-${{ matrix.rid }}.zip -C ./slb-${{ matrix.rid }}
+      run: tar -a -c -f SimplestLoadBalancer-${{ github.ref_name }}-win-${{ matrix.rid }}.zip -C ./publish/win-${{ matrix.rid }} .
     - name: Upload ZIP to Release
       shell: bash
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         VERSION: ${{ github.ref_name }}
-        FILE: SimplestLoadBalancer-${{ github.ref_name }}-${{ matrix.rid }}.zip
-        URL: https://uploads.github.com/repos/${{ github.repository }}/releases/${{ steps.get_version.outputs.RELEASE_ID }}/assets?name=SimplestLoadBalancer-${{ github.ref_name }}-${{ matrix.rid }}.zip
+        FILE: SimplestLoadBalancer-${{ github.ref_name }}-win-${{ matrix.rid }}.zip
+        URL: https://uploads.github.com/repos/${{ github.repository }}/releases/${{ steps.get_version.outputs.RELEASE_ID }}/assets?name=SimplestLoadBalancer-${{ github.ref_name }}-win-${{ matrix.rid }}.zip
       run: |
         echo $VERSION
         echo $URL
