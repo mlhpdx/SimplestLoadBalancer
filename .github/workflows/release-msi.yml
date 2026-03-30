@@ -46,9 +46,9 @@ jobs:
       uses: microsoft/setup-msbuild@v3
     - name: Install WiX
       run: |
-        dotnet tool install --global wix --version "4.*"
-        wix extension add WixToolset.UI.wixext
-        wix extension add WixToolset.Firewall.wixext
+        dotnet tool install --global wix --version "4.0.6"
+        wix extension add WixToolset.UI.wixext/4.0.6
+        wix extension add WixToolset.Firewall.wixext/4.0.6
     - name: Build WiX on Windows
       run: wix build package.wxs -arch ${{ matrix.rid }} -define Version=${{ github.ref_name }} -define PublishDir=./publish/win-${{ matrix.rid }} -o SimplestLoadBalancer-${{ github.ref_name }}-win-${{ matrix.rid }}.msi -ext WixToolset.UI.wixext -ext WixToolset.Firewall.wixext
     - name: Upload MSI to Releaase
