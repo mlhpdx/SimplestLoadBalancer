@@ -27,12 +27,11 @@ jobs:
         echo "VERSION=${{ github.ref_name }}" >> $GITHUB_OUTPUT
         echo "RELEASE_ID=$(jq --raw-output '.release.id' $GITHUB_EVENT_PATH)" >> $GITHUB_OUTPUT
     - name: Install ARM cross-compilation toolchain
-      if: matrix.cross_toolchain != ''
       run: |
         sudo apt-get update
-        sudo apt-get install -y --fix-missing ${{ matrix.cross_toolchain }}
+        sudo apt-get install -y lld
     - name: Publish for OS
-      run: dotnet publish SimplestLoadBalancer.csproj -o ./slb-${{ matrix.rid }} -c Release -r ${{ matrix.rid }} /p:Version=${{ github.ref_name }} /p:CppCompilerAndLinker=arm-linux-gnueabihf-gcc /p:SysRoot=/usr/arm-linux-gnueabihf
+      run: dotnet publish SimplestLoadBalancer.csproj -o ./slb-${{ matrix.rid }} -c Release -r ${{ matrix.rid }} /p:Version=${{ github.ref_name }} /p:CppCompilerAndLinker=clang /p:LinkerFlavor=lld
     - name: Zip it Up
       run: zip -r -j SimplestLoadBalancer-${{ github.ref_name }}-${{ matrix.rid }}.zip ./slb-${{ matrix.rid }}
     - name: Upload ZIP to Release
