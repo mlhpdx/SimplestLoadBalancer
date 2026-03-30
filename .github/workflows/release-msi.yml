@@ -46,7 +46,7 @@ jobs:
       uses: microsoft/setup-msbuild@v3
     - name: Install WiX
       run: |
-        dotnet tool install --global wix
+        dotnet tool install --global wix --version "4.*"
         wix extension add WixToolset.UI.wixext
         wix extension add WixToolset.Firewall.wixext
     - name: Build WiX on Windows
