@@ -13,8 +13,8 @@ jobs:
             os: ubuntu-latest
           - rid: linux-arm
             os: ubuntu-latest
-            apt_packages: lld gcc-arm-linux-gnueabihf
-            publish_args: /p:CppCompilerAndLinker=clang /p:LinkerFlavor=lld 
+            apt_packages: lld llvm gcc-arm-linux-gnueabihf
+            publish_args: /p:CppCompilerAndLinker=clang /p:LinkerFlavor=lld
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v6
@@ -32,6 +32,7 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y ${{ matrix.apt_packages }}
+        sudo ln -sf /usr/bin/arm-linux-gnueabihf-objcopy /usr/local/bin/objcopy
     - name: Publish for OS
       run: dotnet publish SimplestLoadBalancer.csproj -o ./slb-${{ matrix.rid }} -c Release -r ${{ matrix.rid }} /p:Version=${{ github.ref_name }} ${{ matrix.publish_args }}
     - name: Zip it Up
