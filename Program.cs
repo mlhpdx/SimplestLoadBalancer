@@ -383,7 +383,7 @@ namespace SimplestLoadBalancer
                   var internal_port = info.internal_port;
                   byte[] buffer = [0x2e, 0x12, (byte)(internal_port >> 8), (byte)internal_port, port_high, port_low, .. ep_bytes];
                   await control.SendAsync(buffer.AsMemory(), packet.RemoteEndPoint, ct);
-                }
+                } else await Console.Out.WriteLineAsync($"{DateTime.UtcNow:s}: Inquiry for unknown client {client_ep} on port {server_port}.");
               }
               break;
 
