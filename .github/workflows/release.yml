@@ -1,8 +1,9 @@
 name: Release
-on: 
-  release: 
+on:
+  release:
     types:
       - created
+
 jobs:
   publish:
     strategy:
@@ -14,52 +15,91 @@ jobs:
           - rid: linux-arm
             os: ubuntu-latest
             apt_packages: lld llvm gcc-arm-linux-gnueabihf
+            objcopy_path: /usr/bin/arm-linux-gnueabihf-objcopy
+            publish_args: /p:CppCompilerAndLinker=clang /p:LinkerFlavor=lld
+          - rid: linux-arm64
+            os: ubuntu-latest
+            apt_packages: lld llvm gcc-aarch64-linux-gnu
+            objcopy_path: /usr/bin/aarch64-linux-gnu-objcopy
             publish_args: /p:CppCompilerAndLinker=clang /p:LinkerFlavor=lld
     runs-on: ${{ matrix.os }}
     steps:
-    - uses: actions/checkout@v6
-    - name: Setup .NET Core
-      uses: actions/setup-dotnet@v5
-      with:
-        dotnet-version: 10.0.x
-    - name: Get the Tagged Version
-      id: get_version
-      run: | 
-        echo "VERSION=${{ github.ref_name }}" >> $GITHUB_OUTPUT
-        echo "RELEASE_ID=$(jq --raw-output '.release.id' $GITHUB_EVENT_PATH)" >> $GITHUB_OUTPUT
-    - name: Install cross-compilation toolchain
-      if: matrix.apt_packages
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y ${{ matrix.apt_packages }}
-        sudo ln -sf /usr/bin/arm-linux-gnueabihf-objcopy /usr/local/bin/objcopy
-    - name: Publish for OS
-      run: dotnet publish SimplestLoadBalancer.csproj -o ./slb-${{ matrix.rid }} -c Release -r ${{ matrix.rid }} /p:Version=${{ github.ref_name }} ${{ matrix.publish_args }}
-    - name: Zip it Up
-      run: zip -r -j SimplestLoadBalancer-${{ github.ref_name }}-${{ matrix.rid }}.zip ./slb-${{ matrix.rid }}
-    - name: Upload ZIP to Release
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        VERSION: ${{ github.ref_name }}
-        FILE: SimplestLoadBalancer-${{ github.ref_name }}-${{ matrix.rid }}.zip
-        URL: https://uploads.github.com/repos/${{ github.repository }}/releases/${{ steps.get_version.outputs.RELEASE_ID }}/assets?name=SimplestLoadBalancer-${{ github.ref_name }}-${{ matrix.rid }}.zip
-      run: |
-        echo $VERSION
-        echo $URL
-        AUTH="Authorization: token $GITHUB_TOKEN"
-        echo $AUTH
-        curl -sSL -XPOST -H "$AUTH" --upload-file "$FILE" --header "Content-Type:application/octet-stream" --write-out "%{http_code}" --output $(mktemp) "$URL"
+      - uses: actions/checkout@v6
+
+      - name: Setup .NET Core
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Get tagged version
+        id: get_version
+        run: echo "VERSION=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+
+      - name: Install cross-compilation toolchain
+        if: matrix.apt_packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ${{ matrix.apt_packages }}
+
+      - name: Configure objcopy for cross build
+        if: matrix.objcopy_path
+        run: sudo ln -sf "${{ matrix.objcopy_path }}" /usr/local/bin/objcopy
+
+      - name: Publish for runtime identifier
+        run: dotnet publish SimplestLoadBalancer.csproj -o "./slb-${{ matrix.rid }}" -c Release -r "${{ matrix.rid }}" /p:Version="${{ github.ref_name }}" ${{ matrix.publish_args }}
+
+      - name: Zip runtime artifacts
+        run: zip -r -j "SimplestLoadBalancer-${{ github.ref_name }}-${{ matrix.rid }}.zip" "./slb-${{ matrix.rid }}"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: slb-${{ matrix.rid }}-zip
+          path: SimplestLoadBalancer-${{ github.ref_name }}-${{ matrix.rid }}.zip
+
+      - name: Upload ZIP to GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ github.ref_name }}
+          FILE: SimplestLoadBalancer-${{ github.ref_name }}-${{ matrix.rid }}.zip
+        run: gh release upload "$VERSION" "$FILE" --clobber
+
   snap:
     needs: publish
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: linux-x64
+            build_for: amd64
+          - rid: linux-arm
+            build_for: armhf
+          - rid: linux-arm64
+            build_for: arm64
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+
+      - name: Download workflow artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: slb-${{ matrix.rid }}-zip
+          path: snap-input
+
+      - name: Stage binary for snapcraft
+        run: |
+          set -ex
+          mkdir -p snap/local
+          unzip -o "snap-input/SimplestLoadBalancer-${{ github.ref_name }}-${{ matrix.rid }}.zip" -d snap-input/extracted
+          cp "snap-input/extracted/SimplestLoadBalancer" "snap/local/SimplestLoadBalancer"
+          chmod +x "snap/local/SimplestLoadBalancer"
+
       - uses: snapcore/action-build@v1
         id: build
-        env: 
+        env:
           VERSION: ${{ github.ref_name }}
-          URL_X64: https://github.com/mlhpdx/SimplestLoadBalancer/releases/download/${{ github.ref_name }}/SimplestLoadBalancer-${{ github.ref_name }}-linux-x64.zip
-          URL_ARM64: https://github.com/mlhpdx/SimplestLoadBalancer/releases/download/${{ github.ref_name }}/SimplestLoadBalancer-${{ github.ref_name }}-linux-arm.zip
+          SNAPCRAFT_BUILD_FOR: ${{ matrix.build_for }}
+
       - uses: snapcore/action-publish@v1
         env:
           SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.STORE_LOGIN }}

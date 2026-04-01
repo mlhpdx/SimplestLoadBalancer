@@ -1,6 +1,5 @@
 name: simplest-load-balancer
-adopt-info: 
-  - version
+adopt-info: version
 summary: Sessionless UDP Load Balancer
 description: |
   SLB is a sessionless load balancer for UDP traffic, and solves
@@ -17,6 +16,14 @@ confinement: strict # or 'devmode' for development
 
 base: core22 # Ubuntu 22.04 LTS base
 
+architectures:
+  - build-on: [amd64]
+    build-for: [amd64]
+  - build-on: [amd64, arm64]
+    build-for: [armhf]
+  - build-on: [amd64, arm64]
+    build-for: [arm64]
+
 apps:
   simplest-load-balancer:
     command: bin/SimplestLoadBalancer
@@ -30,18 +37,17 @@ parts:
     plugin: nil
     override-pull: |
       set -ex
-      craftctl set version="$(cd $SNAPCRAFT_PROJECT_DIR && git describe --tags)"
+      if [ -n "${VERSION:-}" ]; then
+        craftctl set version="$VERSION"
+      else
+        craftctl set version="$(cd $SNAPCRAFT_PROJECT_DIR && git describe --tags --always)"
+      fi
 
   simplest-load-balancer:
-    plugin: dump
-    source: .
-    build-packages:
-      - unzip
-      - wget
+    after: [version]
+    plugin: nil
     override-build: |
-      craftctl default
-      wget -O release.zip https://github.com/mlhpdx/SimplestLoadBalancer/releases/download/${SNAP_VERSION}/SimplestLoadBalancer-${SNAP_VERSION}-linux-x64.zip
-      unzip release.zip
-      mkdir -p $CRAFT_PART_INSTALL/bin/
-      cp $CRAFT_PART_SRC/publish/SimplestLoadBalancer $CRAFT_PART_INSTALL/bin/
-      chmod +x $CRAFT_PART_INSTALL/bin/SimplestLoadBalancer
+      set -ex
+      mkdir -p "$CRAFT_PART_INSTALL/bin"
+      cp "$CRAFT_PROJECT_DIR/snap/local/SimplestLoadBalancer" "$CRAFT_PART_INSTALL/bin/SimplestLoadBalancer"
+      chmod +x "$CRAFT_PART_INSTALL/bin/SimplestLoadBalancer"
