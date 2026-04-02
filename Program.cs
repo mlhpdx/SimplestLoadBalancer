@@ -243,7 +243,7 @@ namespace SimplestLoadBalancer
             ep =>
             {
               var internal_port = free_internal_ports.Dequeue();
-              return (internal_port, new UdpClient().Configure(), DateTime.UtcNow);
+              return (internal_port, new UdpClient(internal_port).Configure(), DateTime.UtcNow);
             },
             (ep, c) => (c.internal_port, c.internal_client, DateTime.UtcNow)
           );
