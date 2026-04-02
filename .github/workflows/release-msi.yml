@@ -75,7 +75,7 @@ jobs:
       shell: pwsh
       env: 
         VERSION: ${{ github.ref_name }}
-        WINGETCREATE_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        WINGET_CREATE_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         URL_X64: https://github.com/mlhpdx/SimplestLoadBalancer/releases/download/${{ github.ref_name }}/SimplestLoadBalancer-${{ github.ref_name }}-win-x64.msi
         URL_ARM64: https://github.com/mlhpdx/SimplestLoadBalancer/releases/download/${{ github.ref_name }}/SimplestLoadBalancer-${{ github.ref_name }}-win-arm64.msi
       run: |
